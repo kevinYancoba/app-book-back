@@ -11,10 +11,14 @@ import * as bcrypt from 'bcrypt';
 import { AuthRepository } from './auth.repository';
 import { User } from '@prisma/client';
 import { LoginDto } from './dto/login.dto';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly authRepository: AuthRepository) {}
+  constructor(
+    private readonly authRepository: AuthRepository,
+    private readonly jwtService: JwtService,
+  ) {}
 
   public async createUser(user: UserDto): Promise<User> {
     try {
@@ -28,28 +32,38 @@ export class AuthService {
 
       return userCreated;
     } catch (error) {
-       if (error instanceof HttpException) throw error;
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(error);
     }
   }
 
   public async logInUser(loginUser: LoginDto) {
     try {
-      const { email, password } = loginUser;
-      const passwordUser = await this.authRepository.getUserByEmail(email);
-      if (!passwordUser) {
+      const { email: emailUser, password } = loginUser;
+      const user = await this.authRepository.getUserByEmail(emailUser);
+      if (!user) {
         throw new HttpException('Invalid email', HttpStatus.UNAUTHORIZED);
       }
 
       const comparePassword = await bcrypt.compare(
         password,
-        passwordUser.password_hash,
+        user.password_hash,
       );
       if (!comparePassword) {
         throw new HttpException('Invalid Password', HttpStatus.FORBIDDEN);
       }
 
-      return passwordUser;
+      const payload = {
+        sub: user.id,
+        email: user.email,
+        created_at: user.created_at,
+      };
+      const {password_hash, ...result } = user
+
+      return {
+        user : result,
+        acces_token: this.jwtService.sign(payload),
+      };
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(error);
