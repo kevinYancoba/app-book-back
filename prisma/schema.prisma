@@ -1,0 +1,49 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["auth"]
+}
+
+model JwtToken {
+  id         Int       @id(map: "jwt_tokens_pkey") @default(autoincrement())
+  user_id    Int?
+  token      String    @unique(map: "jwt_tokens_token_key")
+  expires_at DateTime  @db.Timestamp(6)
+  created_at DateTime? @db.Timestamp(6)
+  user       User?     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "jwt_tokens_user_id_fkey")
+
+  @@map("jwt_token")
+  @@schema("auth")
+}
+
+model PasswordReset {
+  id          Int       @id(map: "password_resets_pkey") @default(autoincrement())
+  user_id     Int?
+  reset_token String    @unique(map: "password_resets_reset_token_key")
+  expires_at  DateTime  @db.Timestamp(6)
+  created_at  DateTime? @db.Timestamp(6)
+  user        User?     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "password_resets_user_id_fkey")
+
+  @@map("password_reset")
+  @@schema("auth")
+}
+
+model User {
+  id             Int             @id(map: "users_pkey") @default(autoincrement())
+  name           String          @db.VarChar
+  last_name      String          @db.VarChar
+  email          String          @unique(map: "users_email_key")
+  password_hash  String
+  created_at     DateTime?       @db.Timestamp(6)
+  updated_at     DateTime?       @db.Timestamp(6)
+  jwt_token      JwtToken[]
+  password_reset PasswordReset[]
+
+  @@map("user")
+  @@schema("auth")
+}
