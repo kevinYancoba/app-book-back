@@ -59,10 +59,11 @@ export class AuthService {
         created_at: user.created_at,
       };
       const {password_hash, ...result } = user
+      const jwt = this.jwtService.sign(payload);
 
       return {
         user : result,
-        acces_token: this.jwtService.sign(payload),
+        acces_token: jwt,
       };
     } catch (error) {
       if (error instanceof HttpException) throw error;
