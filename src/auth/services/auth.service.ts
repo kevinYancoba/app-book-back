@@ -1,4 +1,4 @@
-import { UserDto } from './dto/user.dto';
+import { UserDto } from '../dto/user.dto';
 import {
   ConflictException,
   HttpException,
@@ -8,9 +8,9 @@ import {
 } from '@nestjs/common';
 
 import * as bcrypt from 'bcrypt';
-import { AuthRepository } from './auth.repository';
+import { AuthRepository } from '../auth.repository';
 import { User } from '@prisma/client';
-import { LoginDto } from './dto/login.dto';
+import { LoginDto } from '../dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
@@ -58,11 +58,11 @@ export class AuthService {
         email: user.email,
         created_at: user.created_at,
       };
-      const {password_hash, ...result } = user
+      const { password_hash, ...result } = user;
       const jwt = this.jwtService.sign(payload);
 
       return {
-        user : result,
+        user: result,
         acces_token: jwt,
       };
     } catch (error) {

@@ -22,12 +22,12 @@ model JwtToken {
 }
 
 model PasswordReset {
-  id          Int       @id(map: "password_resets_pkey") @default(autoincrement())
-  user_id     Int?
-  reset_token String    @unique(map: "password_resets_reset_token_key")
-  expires_at  DateTime  @db.Timestamp(6)
-  created_at  DateTime? @db.Timestamp(6)
-  user        User?     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "password_resets_user_id_fkey")
+  id         Int       @id(map: "password_resets_pkey") @default(autoincrement())
+  user_id    Int?
+  reset_code String    @unique(map: "password_resets_reset_token_key")
+  expires_at DateTime  @db.Timestamp(6)
+  created_at DateTime? @db.Timestamp(6)
+  user       User?     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "password_resets_user_id_fkey")
 
   @@map("password_reset")
   @@schema("auth")
