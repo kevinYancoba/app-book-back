@@ -40,9 +40,10 @@ export class AuthService {
   public async logInUser(loginUser: LoginDto) {
     try {
       const { email: emailUser, password } = loginUser;
+      
       const user = await this.authRepository.getUserByEmail(emailUser);
       if (!user) {
-        throw new HttpException('Invalid email', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Correo no valido', HttpStatus.UNAUTHORIZED);
       }
 
       const comparePassword = await bcrypt.compare(
@@ -50,7 +51,7 @@ export class AuthService {
         user.password_hash,
       );
       if (!comparePassword) {
-        throw new HttpException('Invalid Password', HttpStatus.FORBIDDEN);
+        throw new HttpException('Contraseña no valida', HttpStatus.FORBIDDEN);
       }
 
       const payload = {

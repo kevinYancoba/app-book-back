@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="es" xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta http-equiv="x-ua-compatible" content="ie=edge" />
+    <title>TrackBook • Código de verificación</title>
+    <style>
+      /* Estilos mínimos seguros para email */
+      @media (prefers-color-scheme: dark) {
+        .wrapper {
+          background: #0f172a !important;
+        }
+        .card {
+          background: #111827 !important;
+          color: #e5e7eb !important;
+        }
+        .muted {
+          color: #9ca3af !important;
+        }
+        .code-box {
+          background: #0b1220 !important;
+          border-color: #1f2937 !important;
+        }
+        .btn {
+          background: #2563eb !important;
+          color: #ffffff !important;
+        }
+      }
+      @media only screen and (max-width: 600px) {
+        .container {
+          width: 100% !important;
+          padding: 16px !important;
+        }
+        .code {
+          letter-spacing: 8px !important;
+          font-size: 28px !important;
+        }
+      }
+    </style>
+  </head>
+  <body style="margin: 0; padding: 0; background: #f1f5f9">
+    <span
+      style="
+        display: none;
+        visibility: hidden;
+        opacity: 0;
+        color: transparent;
+        height: 0;
+        width: 0;
+        overflow: hidden;
+      "
+    >
+      Tu código de TrackBook: {{CODE}} (expira en {{MINUTES}} min)
+    </span>
+
+    <table
+      role="presentation"
+      cellpadding="0"
+      cellspacing="0"
+      width="100%"
+      class="wrapper"
+      style="background: #f1f5f9; padding: 24px 0"
+    >
+      <tr>
+        <td align="center">
+          <table
+            role="presentation"
+            cellpadding="0"
+            cellspacing="0"
+            width="560"
+            class="container"
+            style="
+              width: 560px;
+              background: transparent;
+              border-collapse: separate;
+            "
+          >
+            <!-- Header / Brand -->
+            <tr>
+              <td align="center" style="padding: 8px 24px 16px">
+                <table role="presentation" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td
+                      align="center"
+                      style="
+                        font-family: Arial, Helvetica, sans-serif;
+                        font-size: 24px;
+                        font-weight: 700;
+                        color: #111827;
+                      "
+                    >
+                      <!-- Puedes reemplazar esto por un <img src="..." alt="TrackBook" height="32"> -->
+                      Track<span style="color: #2563eb">Book</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      align="center"
+                      class="muted"
+                      style="
+                        font-family: Arial, Helvetica, sans-serif;
+                        font-size: 12px;
+                        color: #6b7280;
+                        padding-top: 4px;
+                      "
+                    >
+                      Seguridad de cuenta
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Card -->
+            <tr>
+              <td>
+                <table
+                  role="presentation"
+                  cellpadding="0"
+                  cellspacing="0"
+                  width="100%"
+                  class="card"
+                  style="
+                    background: #ffffff;
+                    border-radius: 16px;
+                    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+                    border: 1px solid #e5e7eb;
+                  "
+                >
+                  <tr>
+                    <td style="padding: 28px 28px 8px">
+                      <h1
+                        style="
+                          margin: 0;
+                          font-family: Arial, Helvetica, sans-serif;
+                          font-size: 20px;
+                          line-height: 1.3;
+                          color: #111827;
+                        "
+                      >
+                        Hola{{USER_NAME}}, aquí tienes tu código
+                      </h1>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td style="padding: 0 28px 20px">
+                      <p
+                        style="
+                          margin: 8px 0 0;
+                          font-family: Arial, Helvetica, sans-serif;
+                          font-size: 14px;
+                          line-height: 1.6;
+                          color: #374151;
+                        "
+                      >
+                        Usa este código para
+                        <strong>restablecer tu contraseña</strong> en TrackBook.
+                        Por seguridad, el código
+                        <strong>expira en {{MINUTES}} minutos</strong>.
+                      </p>
+                    </td>
+                  </tr>
+
+                  <!-- CODE -->
+                  <tr>
+                    <td align="center" style="padding: 8px 28px 24px">
+                      <table
+                        role="presentation"
+                        cellpadding="0"
+                        cellspacing="0"
+                        width="100%"
+                        class="code-box"
+                        style="
+                          background: #f8fafc;
+                          border: 1px solid #e5e7eb;
+                          border-radius: 12px;
+                        "
+                      >
+                        <tr>
+                          <td align="center" style="padding: 18px 12px">
+                            <div
+                              class="code"
+                              style="
+                                font-family:
+                                  'SFMono-Regular', Consolas, 'Liberation Mono',
+                                  Menlo, monospace;
+                                font-size: 32px;
+                                font-weight: 700;
+                                letter-spacing: 12px;
+                                color: #111827;
+                              "
+                            >
+                              {{CODE}}
+                            </div>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <!-- Help text -->
+                  <tr>
+                    <td style="padding: 8px 28px 24px">
+                      <p
+                        class="muted"
+                        style="
+                          margin: 0;
+                          font-family: Arial, Helvetica, sans-serif;
+                          font-size: 12px;
+                          line-height: 1.6;
+                          color: #6b7280;
+                        "
+                      >
+                        Si tú no solicitaste este código, puedes ignorar este
+                        mensaje. Para mantener tu cuenta segura, no compartas
+                        este código con nadie.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td align="center" style="padding: 16px 8px 0">
+                <p
+                  class="muted"
+                  style="
+                    margin: 0;
+                    font-family: Arial, Helvetica, sans-serif;
+                    font-size: 12px;
+                    color: #6b7280;
+                  "
+                >
+                  © <span id="y">{{YEAR}}</span> TrackBook. Todos los derechos
+                  reservados.
+                </p>
+                <p
+                  class="muted"
+                  style="
+                    margin: 6px 0 0;
+                    font-family: Arial, Helvetica, sans-serif;
+                    font-size: 12px;
+                    color: #9ca3af;
+                  "
+                >
+                  Este correo fue enviado automáticamente, por favor no
+                  respondas a este mensaje.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Año dinámico de respaldo para clientes que ejecutan JS (la mayoría no lo hace, así que deja {{YEAR}} en el render del servidor) -->
+    <script>
+      (function () {
+        try {
+          document.getElementById('y').textContent = new Date().getFullYear();
+        } catch (e) {}
+      })();
+    </script>
+  </body>
+</html>

@@ -45,7 +45,7 @@ export class AuthRepository {
     const expiresAt = addMinutes(new Date(), 15);
 
     try {
-      const resetCodePasswor = await this.prisma.passwordReset.create({
+      const resetPassworDetail = await this.prisma.passwordReset.create({
         data: {
           user_id: user.id,
           reset_code: code,
@@ -54,7 +54,7 @@ export class AuthRepository {
         },
       });
 
-      return resetCodePasswor;
+      return resetPassworDetail;
     } catch (error) {
       return undefined;
     }

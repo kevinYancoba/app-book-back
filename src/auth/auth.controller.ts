@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Query,
   UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -12,6 +13,8 @@ import { TransformDtoInterceptor } from 'src/shared/interceptors/transform-dto.i
 import { UserDto } from './dto/user.dto';
 import { LoginDto } from './dto/login.dto';
 import { ConfigService } from '@nestjs/config';
+import { EmailService } from './services/email.service';
+import { EmailResetDto } from './dto/email-reset.dto';
 
 @ApiTags('Auth')
 // @ApiBearerAuth()
@@ -19,6 +22,7 @@ import { ConfigService } from '@nestjs/config';
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly emailService: EmailService,
     private configService: ConfigService,
   ) {}
 
@@ -38,4 +42,14 @@ export class AuthController {
     console.log(this.configService.get<string>('SECRET_KEY'));
     return this.authService.logInUser(loginUser);
   }
+
+  @Post('resetPassword')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ description: 'Reset passord for user login' })
+  @UseInterceptors(new TransformDtoInterceptor())
+  async resetPassword(@Query() email: EmailResetDto): Promise<any> {
+    return this.emailService.SenCodeResetPassword(email);
+  }
+
+
 }
