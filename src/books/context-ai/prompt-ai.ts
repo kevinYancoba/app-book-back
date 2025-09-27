@@ -13,6 +13,9 @@ EJEMPLO DE RESPUESTA:
     "paginas_capitulo": [15,20]
   }
 }
+
+donde numeros_capitulo es el número de capítulo y paginas_capitulo es el número de páginas que tiene ese capítulo.
+por ejemplo capitulo Ser antes de hacer es el capitulo 1 y tiene 5 paginas(porque de la 15 a la 20 hay 5 paginas) 
   
 INSTRUCCIONES:
 1. Si la imagen del índice no tiene números de página para los capítulos, devuelve "paginas_capitulo":[].

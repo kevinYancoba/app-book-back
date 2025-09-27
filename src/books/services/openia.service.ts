@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import OpenAI from 'openai';
 import { ChatCompletionMessageParam } from 'openai/resources/index';
 
@@ -42,7 +42,7 @@ export class OpeniaService {
       return completion.choices[0].message.content
     } catch (err) {
       console.error(err);
-      return 'ERROR';
+      throw new HttpException('La IA no pudo procesar la imagen del índice'+ err, HttpStatus.BAD_REQUEST);
     }
   }
 
