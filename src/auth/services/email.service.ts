@@ -10,7 +10,6 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Resend } from 'resend';
 import { EmailResetDto } from '../dto/email-reset.dto';
-import { emit } from 'process';
 
 @Injectable()
 export class EmailService {
@@ -28,18 +27,21 @@ export class EmailService {
     try {
       const user = await this.authRepository.getUserByEmail(emailDto.email);
       if (!user) {
-        throw new HttpException('Invalid Email', HttpStatus.FORBIDDEN);
+        throw new HttpException(
+          'No se encontró un usuario con este email',
+          HttpStatus.NOT_FOUND,
+        );
       }
 
       const newCode: string = this.generateOpt().toString();
-      const resetPassworDetail = this.authRepository.createCodeReset(
+      const resetPassworDetail = await this.authRepository.createCodeReset(
         newCode,
         user,
       );
 
       if (!resetPassworDetail) {
         throw new HttpException(
-          'Invalid Email',
+          'Error al generar código de recuperación',
           HttpStatus.INTERNAL_SERVER_ERROR,
         );
       }
@@ -47,13 +49,19 @@ export class EmailService {
       const isSendEmail = await this.sendResetEmail(user, newCode);
       if (!isSendEmail) {
         throw new ConflictException(
-          'Ocurrio un erro al enviar el corero de recuperacion',
+          'Error al enviar el correo de recuperación. Inténtalo de nuevo.',
         );
       }
-      return resetPassworDetail;
+
+      return {
+        message: 'Código de recuperación enviado exitosamente',
+        email: user.email,
+        expiresIn: '15 minutos',
+      };
     } catch (error) {
+      if (error instanceof HttpException) throw error;
       throw new HttpException(
-        `Ocurrio un error inesperado ${error} `,
+        'Ocurrió un error inesperado al procesar la solicitud',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -66,23 +74,28 @@ export class EmailService {
   async sendResetEmail(user: User, code: string): Promise<boolean> {
     const html = this.TEMPLATE_HTML
       .replace(/{{CODE}}/g, code)
-      .replace(/{{MINUTES}}/g, '10')
+      .replace(/{{MINUTES}}/g, '15') // Actualizado a 15 minutos como en el código
       .replace(/{{USER_NAME}}/g, user.name ? ` ${user.name} ` : '')
       .replace(/{{YEAR}}/g, String(new Date().getFullYear()));
 
-    const { data, error } = await this.resend.emails.send({
-      from: 'onboarding@resend.dev',
-      to: 'kvinquiej@gmail.com',
-      // to: [user.email],
-      subject: 'Code reset password',
-      html: html,
-    });
+    try {
+      const { data, error } = await this.resend.emails.send({
+        from: 'onboarding@resend.dev',
+        to: [user.email], // Enviar al email del usuario
+        subject: 'Código de recuperación de contraseña - TrackBook',
+        html: html,
+      });
 
-    if (error) {
+      if (error) {
+        console.error('Error sending email:', error);
+        return false;
+      }
+
+      console.log('Email sent successfully:', data);
+      return true;
+    } catch (error) {
+      console.error('Error in sendResetEmail:', error);
       return false;
-      console.error({ error });
     }
-    return true;
-    console.log({ data });
   }
 }

@@ -40,14 +40,27 @@ export class AuthService {
 
   public async updatePassword(credential: PasswordResetDto) {
     try {
-      const { email, password } = credential;
+      const { email, password, code } = credential;
+
+      // Validar el código de reset
+      const isValidCode = await this.authRepository.validateResetCode(email, code);
+      if (!isValidCode) {
+        throw new HttpException(
+          'Código de verificación inválido o expirado',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
 
       const newPassword = await bcrypt.hash(password, 10);
 
       const user = await this.authRepository.UpdatePassword(email, newPassword);
 
-      if (!user)
-        throw new HttpException('Correo no valido', HttpStatus.UNAUTHORIZED);
+      if (!user) {
+        throw new HttpException('Correo no válido', HttpStatus.UNAUTHORIZED);
+      }
+
+      // Eliminar el código de reset después de usarlo
+      await this.authRepository.deleteResetCode(email, code);
 
       const payload = {
         sub: user.id,
@@ -62,8 +75,9 @@ export class AuthService {
         acces_token: jwt,
       };
     } catch (error) {
+      if (error instanceof HttpException) throw error;
       throw new HttpException(
-        'Ocurrio un error Inesperado',
+        'Ocurrió un error inesperado',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

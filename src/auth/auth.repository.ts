@@ -65,6 +65,13 @@ export class AuthRepository {
     const expiresAt = addMinutes(new Date(), 15);
 
     try {
+      // Eliminar códigos anteriores del usuario
+      await this.prisma.passwordReset.deleteMany({
+        where: {
+          user_id: user.id,
+        },
+      });
+
       const resetPassworDetail = await this.prisma.passwordReset.create({
         data: {
           user_id: user.id,
@@ -77,6 +84,63 @@ export class AuthRepository {
       return resetPassworDetail;
     } catch (error) {
       return undefined;
+    }
+  }
+
+  async validateResetCode(email: string, code: string): Promise<boolean> {
+    try {
+      const user = await this.getUserByEmail(email);
+      if (!user) {
+        return false;
+      }
+
+      const resetRecord = await this.prisma.passwordReset.findFirst({
+        where: {
+          user_id: user.id,
+          reset_code: code,
+          expires_at: {
+            gt: new Date(), // Código no expirado
+          },
+        },
+      });
+
+      return !!resetRecord;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async deleteResetCode(email: string, code: string): Promise<boolean> {
+    try {
+      const user = await this.getUserByEmail(email);
+      if (!user) {
+        return false;
+      }
+
+      const deleteResult = await this.prisma.passwordReset.deleteMany({
+        where: {
+          user_id: user.id,
+          reset_code: code,
+        },
+      });
+
+      return deleteResult.count > 0;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async cleanExpiredResetCodes(): Promise<void> {
+    try {
+      await this.prisma.passwordReset.deleteMany({
+        where: {
+          expires_at: {
+            lt: new Date(), // Códigos expirados
+          },
+        },
+      });
+    } catch (error) {
+      console.error('Error cleaning expired reset codes:', error);
     }
   }
 }

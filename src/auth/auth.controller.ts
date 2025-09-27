@@ -5,7 +5,6 @@ import {
   HttpCode,
   HttpStatus,
   Post,
-  Query,
   UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -46,17 +45,23 @@ export class AuthController {
 
   @Post('codeReset')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ description: 'Reset passord for user login' })
+  @ApiOperation({
+    description: 'Solicitar código de recuperación de contraseña por email',
+    summary: 'Enviar código de reset por email'
+  })
   @UseInterceptors(new TransformDtoInterceptor())
-  async getCodeReset(@Query() email: EmailResetDto): Promise<any> {
-    return this.emailService.getCodeReset(email);
+  async getCodeReset(@Body() emailDto: EmailResetDto): Promise<any> {
+    return this.emailService.getCodeReset(emailDto);
   }
 
   @Post('updatePassword')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ description: 'Reset passord for user login' })
+  @ApiOperation({
+    description: 'Actualizar contraseña usando código de verificación',
+    summary: 'Reset de contraseña con código'
+  })
   @UseInterceptors(new TransformDtoInterceptor())
-  async updatePassword(@Query() credential: PasswordResetDto): Promise<any> {
+  async updatePassword(@Body() credential: PasswordResetDto): Promise<any> {
     return this.authService.updatePassword(credential);
   }
 
