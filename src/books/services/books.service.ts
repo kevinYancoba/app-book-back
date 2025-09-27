@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class BooksService {
+  [x: string]: any;
   constructor(
     private openIaService: OpeniaService,
     private bookRepository: BooksRepository,

@@ -11,6 +11,8 @@ export class PlanRepository {
           id_libro: bookId,
           fecha_inicio: new Date(),
           fecha_fin: endDate,
+          fecha_fin_original: endDate,
+          titulo: 'Plan de Lectura',
         },
       });
 

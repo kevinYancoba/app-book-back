@@ -34,19 +34,20 @@ model PasswordReset {
 }
 
 model User {
-  id             Int             @id(map: "users_pkey") @default(autoincrement())
-  name           String          @db.VarChar
-  last_name      String          @db.VarChar
-  email          String          @unique(map: "users_email_key")
-  password_hash  String
-  created_at     DateTime?       @db.Timestamp(6)
-  updated_at     DateTime?       @db.Timestamp(6)
-  jwt_token      JwtToken[]
-  password_reset PasswordReset[]
-  libro          Book[]
-  notificacion   Notification[]
-  perfillectura  ReadinProfile?
-  planlectura    ReadingPlan[]
+  id                   Int                   @id(map: "users_pkey") @default(autoincrement())
+  name                 String                @db.VarChar
+  last_name            String                @db.VarChar
+  email                String                @unique(map: "users_email_key")
+  password_hash        String
+  created_at           DateTime?             @db.Timestamp(6)
+  updated_at           DateTime?             @db.Timestamp(6)
+  jwt_token            JwtToken[]
+  password_reset       PasswordReset[]
+  libro                Book[]
+  notificacion         Notification[]
+  perfillectura        ReadinProfile?
+  planlectura          ReadingPlan[]
+  preferencias_usuario preferencias_usuario?
 
   @@map("user")
   @@schema("auth")
@@ -77,6 +78,13 @@ model PlanDetail {
   pagina_inicio           Int?
   pagina_fin              Int?
   dia                     Int?
+  created_at              DateTime?    @default(now()) @db.Timestamp(6)
+  dificultad_percibida    Int?
+  es_atrasado             Boolean?     @default(false)
+  fecha_completado        DateTime?    @db.Date
+  notas                   String?
+  tiempo_real_minutos     Int?
+  updated_at              DateTime?    @db.Timestamp(6)
   capitulo                Chapter?     @relation(fields: [id_capitulo], references: [id_capitulo], onDelete: Cascade, onUpdate: NoAction)
   planlectura             ReadingPlan? @relation(fields: [id_plan], references: [id_plan], onDelete: Cascade, onUpdate: NoAction)
 
@@ -120,6 +128,9 @@ model ReadinProfile {
   hora_preferida          DateTime  @db.Time(6)
   incluir_fines_de_semana Boolean?  @default(true)
   fecha_registro          DateTime? @default(now()) @db.Timestamp(6)
+  auto_ajuste_plan        Boolean?  @default(true)
+  recordatorios_activos   Boolean?  @default(true)
+  updated_at              DateTime? @db.Timestamp(6)
   user                    User      @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("perfillectura")
@@ -127,17 +138,28 @@ model ReadinProfile {
 }
 
 model ReadingPlan {
-  id_plan            Int               @id @default(autoincrement())
-  id                 Int?
-  id_libro           Int?
-  fecha_inicio       DateTime          @db.Date
-  fecha_fin          DateTime          @db.Date
-  generado_por_ia    Boolean?          @default(true)
-  descripcion        String?
-  detalleplanlectura PlanDetail[]
-  user               User?             @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  libro              Book?             @relation(fields: [id_libro], references: [id_libro], onDelete: Cascade, onUpdate: NoAction)
-  progresolectura    ReadingProgress[]
+  id_plan              Int               @id @default(autoincrement())
+  id                   Int?
+  id_libro             Int?
+  fecha_inicio         DateTime          @db.Date
+  fecha_fin            DateTime          @db.Date
+  generado_por_ia      Boolean?          @default(true)
+  descripcion          String?
+  created_at           DateTime?         @default(now()) @db.Timestamp(6)
+  dias_atrasado        Int?              @default(0)
+  es_personalizado     Boolean?          @default(false)
+  estado               PlanStatus        @default(ACTIVO)
+  fecha_fin_original   DateTime          @db.Date
+  incluir_fines_semana Boolean?          @default(true)
+  paginas_por_dia      Int?
+  progreso_porcentaje  Float?            @default(0.0)
+  tiempo_estimado_dia  Int?
+  titulo               String            @db.VarChar(200)
+  updated_at           DateTime?         @db.Timestamp(6)
+  detalleplanlectura   PlanDetail[]
+  user                 User?             @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  libro                Book?             @relation(fields: [id_libro], references: [id_libro], onDelete: Cascade, onUpdate: NoAction)
+  progresolectura      ReadingProgress[]
 
   @@map("planlectura")
   @@schema("books")
@@ -151,8 +173,48 @@ model ReadingProgress {
   capitulos_leidos     Int?
   tiempo_invertido_min Int?
   completado           Boolean?     @default(false)
+  created_at           DateTime?    @default(now()) @db.Timestamp(6)
+  estado_dia           DayStatus    @default(PENDIENTE)
+  notas_dia            String?
+  paginas_leidas       Int?
+  porcentaje_dia       Float?       @default(0.0)
   planlectura          ReadingPlan? @relation(fields: [id_plan], references: [id_plan], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("progresolectura")
+  @@schema("books")
+}
+
+model preferencias_usuario {
+  id                   Int       @id @default(autoincrement())
+  user_id              Int       @unique
+  tema_preferido       String?   @default("light")
+  idioma               String?   @default("es")
+  notificaciones_email Boolean?  @default(true)
+  notificaciones_push  Boolean?  @default(true)
+  zona_horaria         String?   @default("America/Mexico_City")
+  formato_fecha        String?   @default("DD/MM/YYYY")
+  created_at           DateTime? @default(now()) @db.Timestamp(6)
+  updated_at           DateTime? @db.Timestamp(6)
+  user                 User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("books")
+}
+
+enum DayStatus {
+  PENDIENTE
+  COMPLETADO
+  PARCIAL
+  ATRASADO
+  SALTADO
+
+  @@schema("books")
+}
+
+enum PlanStatus {
+  ACTIVO
+  COMPLETADO
+  PAUSADO
+  CANCELADO
+
   @@schema("books")
 }
