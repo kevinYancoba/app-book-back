@@ -12,6 +12,7 @@ import { AuthRepository } from '../auth.repository';
 import { User } from '@prisma/client';
 import { LoginDto } from '../dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
+import { PasswordResetDto } from '../dto/password-reset.dto';
 
 @Injectable()
 export class AuthService {
@@ -37,10 +38,41 @@ export class AuthService {
     }
   }
 
+  public async updatePassword(credential: PasswordResetDto) {
+    try {
+      const { email, password } = credential;
+
+      const newPassword = await bcrypt.hash(password, 10);
+
+      const user = await this.authRepository.UpdatePassword(email, newPassword);
+
+      if (!user)
+        throw new HttpException('Correo no valido', HttpStatus.UNAUTHORIZED);
+
+      const payload = {
+        sub: user.id,
+        email: user.email,
+        created_at: user.created_at,
+      };
+      const { password_hash = '', ...result } = user;
+      const jwt = this.jwtService.sign(payload);
+
+      return {
+        user: result,
+        acces_token: jwt,
+      };
+    } catch (error) {
+      throw new HttpException(
+        'Ocurrio un error Inesperado',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   public async logInUser(loginUser: LoginDto) {
     try {
       const { email: emailUser, password } = loginUser;
-      
+
       const user = await this.authRepository.getUserByEmail(emailUser);
       if (!user) {
         throw new HttpException('Correo no valido', HttpStatus.UNAUTHORIZED);

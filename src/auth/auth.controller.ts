@@ -15,6 +15,7 @@ import { LoginDto } from './dto/login.dto';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from './services/email.service';
 import { EmailResetDto } from './dto/email-reset.dto';
+import { PasswordResetDto } from './dto/password-reset.dto';
 
 @ApiTags('Auth')
 // @ApiBearerAuth()
@@ -43,12 +44,20 @@ export class AuthController {
     return this.authService.logInUser(loginUser);
   }
 
-  @Post('resetPassword')
+  @Post('codeReset')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ description: 'Reset passord for user login' })
   @UseInterceptors(new TransformDtoInterceptor())
-  async resetPassword(@Query() email: EmailResetDto): Promise<any> {
-    return this.emailService.SenCodeResetPassword(email);
+  async getCodeReset(@Query() email: EmailResetDto): Promise<any> {
+    return this.emailService.getCodeReset(email);
+  }
+
+  @Post('updatePassword')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ description: 'Reset passord for user login' })
+  @UseInterceptors(new TransformDtoInterceptor())
+  async updatePassword(@Query() credential: PasswordResetDto): Promise<any> {
+    return this.authService.updatePassword(credential);
   }
 
 

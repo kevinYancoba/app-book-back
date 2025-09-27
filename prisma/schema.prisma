@@ -6,7 +6,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["auth"]
+  schemas  = ["auth", "books"]
 }
 
 model JwtToken {
@@ -43,7 +43,116 @@ model User {
   updated_at     DateTime?       @db.Timestamp(6)
   jwt_token      JwtToken[]
   password_reset PasswordReset[]
+  libro          Book[]
+  notificacion   Notification[]
+  perfillectura  ReadinProfile?
+  planlectura    ReadingPlan[]
 
   @@map("user")
   @@schema("auth")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model Chapter {
+  id_capitulo        Int          @id @default(autoincrement())
+  id_libro           Int?
+  numero_capitulo    Int
+  titulo_capitulo    String?      @db.VarChar(200)
+  paginas_estimadas  Int?
+  libro              Book?        @relation(fields: [id_libro], references: [id_libro], onDelete: Cascade, onUpdate: NoAction)
+  detalleplanlectura PlanDetail[]
+
+  @@map("capitulo")
+  @@schema("books")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model PlanDetail {
+  id_detalle              Int          @id @default(autoincrement())
+  id_plan                 Int?
+  id_capitulo             Int?
+  fecha_asignada          DateTime     @db.Date
+  leido                   Boolean?     @default(false)
+  tiempo_estimado_minutos Int?
+  pagina_inicio           Int?
+  pagina_fin              Int?
+  dia                     Int?
+  capitulo                Chapter?     @relation(fields: [id_capitulo], references: [id_capitulo], onDelete: Cascade, onUpdate: NoAction)
+  planlectura             ReadingPlan? @relation(fields: [id_plan], references: [id_plan], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("detalleplanlectura")
+  @@schema("books")
+}
+
+model Book {
+  id_libro       Int           @id @default(autoincrement())
+  titulo         String        @db.VarChar(200)
+  autor          String?       @db.VarChar(150)
+  imagen_indice  String?
+  id             Int?
+  creado_por_ocr Boolean?      @default(false)
+  fecha_subida   DateTime?     @default(now()) @db.Timestamp(6)
+  capitulo       Chapter[]
+  user           User?         @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  planlectura    ReadingPlan[]
+
+  @@map("libro")
+  @@schema("books")
+}
+
+model Notification {
+  id_notificacion Int       @id @default(autoincrement())
+  id              Int?
+  mensaje         String
+  fecha_envio     DateTime? @default(now()) @db.Timestamp(6)
+  leida           Boolean?  @default(false)
+  user            User?     @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("notificacion")
+  @@schema("books")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ReadinProfile {
+  id                      Int       @id
+  nivel_lectura           Int?
+  tiempo_lectura_diario   Int?
+  hora_preferida          DateTime  @db.Time(6)
+  incluir_fines_de_semana Boolean?  @default(true)
+  fecha_registro          DateTime? @default(now()) @db.Timestamp(6)
+  user                    User      @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("perfillectura")
+  @@schema("books")
+}
+
+model ReadingPlan {
+  id_plan            Int               @id @default(autoincrement())
+  id                 Int?
+  id_libro           Int?
+  fecha_inicio       DateTime          @db.Date
+  fecha_fin          DateTime          @db.Date
+  generado_por_ia    Boolean?          @default(true)
+  descripcion        String?
+  detalleplanlectura PlanDetail[]
+  user               User?             @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  libro              Book?             @relation(fields: [id_libro], references: [id_libro], onDelete: Cascade, onUpdate: NoAction)
+  progresolectura    ReadingProgress[]
+
+  @@map("planlectura")
+  @@schema("books")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ReadingProgress {
+  id_progreso          Int          @id @default(autoincrement())
+  id_plan              Int?
+  fecha                DateTime     @db.Date
+  capitulos_leidos     Int?
+  tiempo_invertido_min Int?
+  completado           Boolean?     @default(false)
+  planlectura          ReadingPlan? @relation(fields: [id_plan], references: [id_plan], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("progresolectura")
+  @@schema("books")
 }

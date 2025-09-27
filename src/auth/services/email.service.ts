@@ -24,7 +24,7 @@ export class EmailService {
     );
   }
 
-  async SenCodeResetPassword(emailDto: EmailResetDto) {
+  async getCodeReset(emailDto: EmailResetDto) {
     try {
       const user = await this.authRepository.getUserByEmail(emailDto.email);
       if (!user) {
@@ -32,7 +32,7 @@ export class EmailService {
       }
 
       const newCode: string = this.generateOpt().toString();
-      const resetPassworDetail = this.authRepository.createCodeResetPassword(
+      const resetPassworDetail = this.authRepository.createCodeReset(
         newCode,
         user,
       );
@@ -64,10 +64,11 @@ export class EmailService {
   }
 
   async sendResetEmail(user: User, code: string): Promise<boolean> {
-    const html = this.TEMPLATE_HTML.replace('{{CODE}}', code)
-      .replace('{{MINUTES}}', '10')
-      .replace('{{USER_NAME}}', user.name ? ` ${user.name} ` : '')
-      //.replace('{{YEAR}}', String(new Date().getFullYear()));
+    const html = this.TEMPLATE_HTML
+      .replace(/{{CODE}}/g, code)
+      .replace(/{{MINUTES}}/g, '10')
+      .replace(/{{USER_NAME}}/g, user.name ? ` ${user.name} ` : '')
+      .replace(/{{YEAR}}/g, String(new Date().getFullYear()));
 
     const { data, error } = await this.resend.emails.send({
       from: 'onboarding@resend.dev',

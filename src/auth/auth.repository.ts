@@ -26,6 +26,27 @@ export class AuthRepository {
     }
   }
 
+  async UpdatePassword(
+    email: string,
+    password: string,
+  ): Promise<User | undefined> {
+    try {
+      const userUpdate = await this.prisma.user.update({
+        where: {
+          email: email,
+        },
+        data: {
+          password_hash: password,
+        },
+      });
+
+      return userUpdate;
+
+    } catch (error) {
+      return undefined;
+    }
+  }
+
   async getUserByEmail(email: string): Promise<User | undefined> {
     try {
       const user = await this.prisma.user.findUnique({
@@ -40,8 +61,7 @@ export class AuthRepository {
     }
   }
 
-  async createCodeResetPassword(code: string, user: User) {
-    
+  async createCodeReset(code: string, user: User) {
     const expiresAt = addMinutes(new Date(), 15);
 
     try {
