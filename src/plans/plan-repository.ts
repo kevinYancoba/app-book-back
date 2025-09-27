@@ -2,6 +2,7 @@ import { DatabaseService } from 'src/database/database.service';
 import { Injectable, Logger } from '@nestjs/common';
 import { UpdatePlanDto } from './dto/update-plan.dto';
 import { PlanStatusEnum } from './dto/plan-status.dto';
+import { DailyProgressDto, UpdateProgressDto, DayStatusEnum } from './dto/progress-tracking.dto';
 
 @Injectable()
 export class PlanRepository {
@@ -274,5 +275,295 @@ export class PlanRepository {
       this.logger.error(`Error al verificar propiedad del plan: ${error.message}`, error.stack);
       return false;
     }
+  }
+
+  // ==================== MÉTODOS DE TRACKING DE PROGRESO ====================
+
+  // Crear o actualizar progreso diario
+  async createOrUpdateDailyProgress(progressData: DailyProgressDto) {
+    try {
+      this.logger.log(`Registrando progreso para plan ${progressData.planId} en fecha ${progressData.fecha}`);
+
+      // Verificar si ya existe progreso para esta fecha
+      const existingProgress = await this.prisma.readingProgress.findFirst({
+        where: {
+          id_plan: progressData.planId,
+          fecha: progressData.fecha,
+        },
+      });
+
+      const mappedData = this.mapProgressDataToDbFields(progressData);
+
+      if (existingProgress) {
+        // Actualizar progreso existente
+        const updatedProgress = await this.prisma.readingProgress.update({
+          where: {
+            id_progreso: existingProgress.id_progreso,
+          },
+          data: mappedData,
+        });
+
+        this.logger.log(`Progreso actualizado para plan ${progressData.planId}`);
+        return updatedProgress;
+      } else {
+        // Crear nuevo progreso
+        const newProgress = await this.prisma.readingProgress.create({
+          data: {
+            id_plan: progressData.planId,
+            ...mappedData,
+          },
+        });
+
+        this.logger.log(`Nuevo progreso creado para plan ${progressData.planId}`);
+        return newProgress;
+      }
+    } catch (error) {
+      this.logger.error(`Error al registrar progreso: ${error.message}`, error.stack);
+      return undefined;
+    }
+  }
+
+  // Obtener historial de progreso de un plan
+  async getProgressHistory(planId: number, limit?: number) {
+    try {
+      this.logger.log(`Obteniendo historial de progreso para plan ${planId}`);
+
+      const progress = await this.prisma.readingProgress.findMany({
+        where: {
+          id_plan: planId,
+        },
+        orderBy: {
+          fecha: 'desc',
+        },
+        take: limit,
+      });
+
+      this.logger.log(`${progress.length} registros de progreso encontrados para plan ${planId}`);
+      return progress;
+    } catch (error) {
+      this.logger.error(`Error al obtener historial de progreso: ${error.message}`, error.stack);
+      return undefined;
+    }
+  }
+
+  // Actualizar progreso específico
+  async updateProgress(progressId: number, updateData: UpdateProgressDto) {
+    try {
+      this.logger.log(`Actualizando progreso ${progressId}`);
+
+      const mappedData = this.mapUpdateProgressToDbFields(updateData);
+
+      const updatedProgress = await this.prisma.readingProgress.update({
+        where: {
+          id_progreso: progressId,
+        },
+        data: mappedData,
+      });
+
+      this.logger.log(`Progreso ${progressId} actualizado exitosamente`);
+      return updatedProgress;
+    } catch (error) {
+      this.logger.error(`Error al actualizar progreso: ${error.message}`, error.stack);
+      return undefined;
+    }
+  }
+
+  // Marcar detalles del plan como leídos
+  async markChaptersAsRead(detailIds: number[], tiempoReal?: number, dificultad?: number, notas?: string) {
+    try {
+      this.logger.log(`Marcando ${detailIds.length} detalles como leídos`);
+
+      const updateData: any = {
+        leido: true,
+        fecha_completado: new Date(),
+        updated_at: new Date(),
+      };
+
+      if (tiempoReal !== undefined) {
+        updateData.tiempo_real_minutos = tiempoReal;
+      }
+
+      if (dificultad !== undefined) {
+        updateData.dificultad_percibida = dificultad;
+      }
+
+      if (notas !== undefined) {
+        updateData.notas = notas;
+      }
+
+      const updatedDetails = await this.prisma.planDetail.updateMany({
+        where: {
+          id_detalle: {
+            in: detailIds,
+          },
+        },
+        data: updateData,
+      });
+
+      this.logger.log(`${updatedDetails.count} detalles marcados como leídos`);
+      return updatedDetails;
+    } catch (error) {
+      this.logger.error(`Error al marcar capítulos como leídos: ${error.message}`, error.stack);
+      return undefined;
+    }
+  }
+
+  // Obtener detalles del plan por fecha
+  async getPlanDetailsByDate(planId: number, fecha: Date) {
+    try {
+      const details = await this.prisma.planDetail.findMany({
+        where: {
+          id_plan: planId,
+          fecha_asignada: fecha,
+        },
+        include: {
+          capitulo: {
+            select: {
+              id_capitulo: true,
+              numero_capitulo: true,
+              titulo_capitulo: true,
+              paginas_estimadas: true,
+            },
+          },
+        },
+        orderBy: {
+          dia: 'asc',
+        },
+      });
+
+      return details;
+    } catch (error) {
+      this.logger.error(`Error al obtener detalles por fecha: ${error.message}`, error.stack);
+      return undefined;
+    }
+  }
+
+  // Calcular estadísticas de progreso
+  async calculateProgressStats(planId: number) {
+    try {
+      const [plan, allProgress, allDetails] = await Promise.all([
+        this.prisma.readingPlan.findUnique({
+          where: { id_plan: planId },
+        }),
+        this.prisma.readingProgress.findMany({
+          where: { id_plan: planId },
+          orderBy: { fecha: 'asc' },
+        }),
+        this.prisma.planDetail.findMany({
+          where: { id_plan: planId },
+          orderBy: { fecha_asignada: 'asc' },
+        }),
+      ]);
+
+      if (!plan) return null;
+
+      // Calcular estadísticas básicas
+      const totalDetails = allDetails.length;
+      const completedDetails = allDetails.filter(d => d.leido).length;
+      const progressPercentage = totalDetails > 0 ? (completedDetails / totalDetails) * 100 : 0;
+
+      // Calcular estadísticas de progreso diario
+      const completedDays = allProgress.filter(p => p.completado).length;
+      const totalDays = allProgress.length;
+
+      const avgTimePerDay = allProgress.length > 0
+        ? allProgress.reduce((sum, p) => sum + (p.tiempo_invertido_min || 0), 0) / allProgress.length
+        : 0;
+
+      const avgPagesPerDay = allProgress.length > 0
+        ? allProgress.reduce((sum, p) => sum + (p.paginas_leidas || 0), 0) / allProgress.length
+        : 0;
+
+      // Calcular racha actual
+      let currentStreak = 0;
+      for (let i = allProgress.length - 1; i >= 0; i--) {
+        if (allProgress[i].completado) {
+          currentStreak++;
+        } else {
+          break;
+        }
+      }
+
+      return {
+        totalDetails,
+        completedDetails,
+        progressPercentage,
+        completedDays,
+        totalDays,
+        avgTimePerDay,
+        avgPagesPerDay,
+        currentStreak,
+      };
+    } catch (error) {
+      this.logger.error(`Error al calcular estadísticas: ${error.message}`, error.stack);
+      return null;
+    }
+  }
+
+  // ==================== FUNCIONES AUXILIARES DE MAPEO ====================
+
+  // Mapear datos de progreso diario a campos de base de datos
+  private mapProgressDataToDbFields(progressData: DailyProgressDto): any {
+    const mappedData: any = {
+      fecha: progressData.fecha,
+      updated_at: new Date(),
+    };
+
+    if (progressData.capitulosLeidos !== undefined) {
+      mappedData.capitulos_leidos = progressData.capitulosLeidos.length;
+    }
+
+    if (progressData.paginasLeidas !== undefined) {
+      mappedData.paginas_leidas = progressData.paginasLeidas;
+    }
+
+    if (progressData.tiempoInvertidoMin !== undefined) {
+      mappedData.tiempo_invertido_min = progressData.tiempoInvertidoMin;
+    }
+
+    if (progressData.estadoDia !== undefined) {
+      mappedData.estado_dia = progressData.estadoDia;
+      mappedData.completado = progressData.estadoDia === 'COMPLETADO';
+    }
+
+    if (progressData.porcentajeDia !== undefined) {
+      mappedData.porcentaje_dia = progressData.porcentajeDia;
+    }
+
+    if (progressData.notasDia !== undefined) {
+      mappedData.notas_dia = progressData.notasDia;
+    }
+
+    return mappedData;
+  }
+
+  // Mapear datos de actualización de progreso a campos de base de datos
+  private mapUpdateProgressToDbFields(updateData: UpdateProgressDto): any {
+    const mappedData: any = {
+      updated_at: new Date(),
+    };
+
+    if (updateData.paginasLeidas !== undefined) {
+      mappedData.paginas_leidas = updateData.paginasLeidas;
+    }
+
+    if (updateData.tiempoInvertidoMin !== undefined) {
+      mappedData.tiempo_invertido_min = updateData.tiempoInvertidoMin;
+    }
+
+    if (updateData.estadoDia !== undefined) {
+      mappedData.estado_dia = updateData.estadoDia;
+      mappedData.completado = updateData.estadoDia === 'COMPLETADO';
+    }
+
+    if (updateData.porcentajeDia !== undefined) {
+      mappedData.porcentaje_dia = updateData.porcentajeDia;
+    }
+
+    if (updateData.notasDia !== undefined) {
+      mappedData.notas_dia = updateData.notasDia;
+    }
+
+    return mappedData;
   }
 }

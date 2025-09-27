@@ -4,6 +4,12 @@ import { BooksService } from 'src/books/services/books.service';
 import { PerilLecturaDto } from 'src/books/dto/perfil-lectura.dto';
 import { UpdatePlanDto } from '../dto/update-plan.dto';
 import { PlanStatusEnum } from '../dto/plan-status.dto';
+import {
+  DailyProgressDto,
+  UpdateProgressDto,
+  MarkChapterReadDto,
+  DayStatusEnum
+} from '../dto/progress-tracking.dto';
 
 @Injectable()
 export class PlanService {
@@ -567,5 +573,375 @@ export class PlanService {
       this.logger.error(`Error al calcular estadísticas: ${error.message}`, error.stack);
       return null;
     }
+  }
+
+  // ==================== MÉTODOS DE TRACKING DE PROGRESO ====================
+
+  // Registrar progreso diario
+  async registerDailyProgress(progressData: DailyProgressDto, userId?: number) {
+    try {
+      this.logger.log(`Registrando progreso diario para plan ${progressData.planId}`);
+
+      // Validar datos de entrada
+      this.validateProgressData(progressData);
+
+      // Verificar propiedad del plan si se proporciona userId
+      if (userId) {
+        const isOwner = await this.planRepository.verifyPlanOwnership(progressData.planId, userId);
+        if (!isOwner) {
+          throw new HttpException(
+            'No tienes permisos para registrar progreso en este plan',
+            HttpStatus.FORBIDDEN,
+          );
+        }
+      }
+
+      // Registrar progreso
+      const progress = await this.planRepository.createOrUpdateDailyProgress(progressData);
+
+      if (!progress) {
+        throw new HttpException(
+          'Error al registrar el progreso diario',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      // Actualizar progreso del plan si hay capítulos leídos
+      if (progressData.capitulosLeidos && progressData.capitulosLeidos.length > 0) {
+        await this.updatePlanProgressPercentage(progressData.planId);
+      }
+
+      this.logger.log(`Progreso diario registrado exitosamente para plan ${progressData.planId}`);
+      return {
+        mensaje: 'Progreso registrado exitosamente',
+        progreso: progress,
+      };
+
+    } catch (error) {
+      this.logger.error(`Error al registrar progreso diario: ${error.message}`, error.stack);
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        'Error interno al registrar el progreso',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // Obtener historial de progreso
+  async getProgressHistory(planId: number, userId?: number, limit?: number) {
+    try {
+      this.logger.log(`Obteniendo historial de progreso para plan ${planId}`);
+
+      if (!planId || planId <= 0) {
+        throw new HttpException(
+          'ID de plan inválido',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Verificar propiedad si se proporciona userId
+      if (userId) {
+        const isOwner = await this.planRepository.verifyPlanOwnership(planId, userId);
+        if (!isOwner) {
+          throw new HttpException(
+            'No tienes permisos para ver el progreso de este plan',
+            HttpStatus.FORBIDDEN,
+          );
+        }
+      }
+
+      const progress = await this.planRepository.getProgressHistory(planId, limit);
+
+      if (!progress) {
+        throw new HttpException(
+          'Error al obtener el historial de progreso',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      // Calcular estadísticas del historial
+      const estadisticas = this.calculateHistoryStatistics(progress);
+
+      this.logger.log(`Historial de progreso obtenido para plan ${planId}`);
+      return {
+        progreso: progress,
+        estadisticas,
+      };
+
+    } catch (error) {
+      this.logger.error(`Error al obtener historial de progreso: ${error.message}`, error.stack);
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        'Error interno al obtener el historial',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // Actualizar progreso específico
+  async updateSpecificProgress(progressId: number, updateData: UpdateProgressDto, userId?: number) {
+    try {
+      this.logger.log(`Actualizando progreso específico ${progressId}`);
+
+      if (!progressId || progressId <= 0) {
+        throw new HttpException(
+          'ID de progreso inválido',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Validar datos de actualización
+      this.validateUpdateProgressData(updateData);
+
+      const updatedProgress = await this.planRepository.updateProgress(progressId, updateData);
+
+      if (!updatedProgress) {
+        throw new HttpException(
+          'Error al actualizar el progreso o progreso no encontrado',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      this.logger.log(`Progreso ${progressId} actualizado exitosamente`);
+      return {
+        mensaje: 'Progreso actualizado exitosamente',
+        progreso: updatedProgress,
+      };
+
+    } catch (error) {
+      this.logger.error(`Error al actualizar progreso: ${error.message}`, error.stack);
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        'Error interno al actualizar el progreso',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // Marcar capítulos como leídos
+  async markChaptersAsRead(planId: number, markData: MarkChapterReadDto, userId?: number) {
+    try {
+      this.logger.log(`Marcando capítulos como leídos en plan ${planId}`);
+
+      if (!planId || planId <= 0) {
+        throw new HttpException(
+          'ID de plan inválido',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Verificar propiedad si se proporciona userId
+      if (userId) {
+        const isOwner = await this.planRepository.verifyPlanOwnership(planId, userId);
+        if (!isOwner) {
+          throw new HttpException(
+            'No tienes permisos para modificar este plan',
+            HttpStatus.FORBIDDEN,
+          );
+        }
+      }
+
+      // Marcar capítulos como leídos
+      const result = await this.planRepository.markChaptersAsRead(
+        markData.detalleIds,
+        markData.tiempoRealMinutos,
+        markData.dificultadPercibida,
+        markData.notas
+      );
+
+      if (!result) {
+        throw new HttpException(
+          'Error al marcar capítulos como leídos',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      // Actualizar porcentaje de progreso del plan
+      const newProgress = await this.updatePlanProgressPercentage(planId);
+
+      this.logger.log(`${result.count} capítulos marcados como leídos en plan ${planId}`);
+      return {
+        mensaje: 'Capítulos marcados como leídos exitosamente',
+        capitulosMarcados: result.count,
+        nuevoProgreso: newProgress,
+        detallesActualizados: markData.detalleIds.map(id => ({
+          id_detalle: id,
+          leido: true,
+          fecha_completado: new Date(),
+          tiempo_real_minutos: markData.tiempoRealMinutos,
+          notas: markData.notas,
+        })),
+      };
+
+    } catch (error) {
+      this.logger.error(`Error al marcar capítulos como leídos: ${error.message}`, error.stack);
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        'Error interno al marcar capítulos',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // ==================== FUNCIONES AUXILIARES DE PROGRESO ====================
+
+  // Validar datos de progreso diario
+  private validateProgressData(progressData: DailyProgressDto): void {
+    const now = new Date();
+    const progressDate = new Date(progressData.fecha);
+
+    // No permitir fechas futuras muy lejanas (más de 1 día)
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    if (progressDate > tomorrow) {
+      throw new HttpException(
+        'No se puede registrar progreso para fechas futuras',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Validar que si hay capítulos leídos, también haya páginas o tiempo
+    if (progressData.capitulosLeidos && progressData.capitulosLeidos.length > 0) {
+      if (!progressData.paginasLeidas && !progressData.tiempoInvertidoMin) {
+        throw new HttpException(
+          'Debe especificar páginas leídas o tiempo invertido al marcar capítulos como leídos',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
+    // Validar consistencia entre estado y porcentaje
+    if (progressData.estadoDia === DayStatusEnum.COMPLETADO && progressData.porcentajeDia && progressData.porcentajeDia < 100) {
+      throw new HttpException(
+        'Un día completado debe tener 100% de progreso',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  // Validar datos de actualización de progreso
+  private validateUpdateProgressData(updateData: UpdateProgressDto): void {
+    // Validar consistencia entre estado y porcentaje
+    if (updateData.estadoDia === DayStatusEnum.COMPLETADO && updateData.porcentajeDia && updateData.porcentajeDia < 100) {
+      throw new HttpException(
+        'Un día completado debe tener 100% de progreso',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Validar que al menos un campo esté presente
+    const hasValidField = updateData.paginasLeidas !== undefined ||
+                         updateData.tiempoInvertidoMin !== undefined ||
+                         updateData.estadoDia !== undefined ||
+                         updateData.porcentajeDia !== undefined ||
+                         updateData.notasDia !== undefined;
+
+    if (!hasValidField) {
+      throw new HttpException(
+        'Debe proporcionar al menos un campo para actualizar',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  // Actualizar porcentaje de progreso del plan
+  private async updatePlanProgressPercentage(planId: number): Promise<number> {
+    try {
+      const stats = await this.planRepository.calculateProgressStats(planId);
+
+      if (!stats) {
+        return 0;
+      }
+
+      // Actualizar el porcentaje en el plan
+      await this.planRepository.updatePlan(planId, {
+        // Solo actualizar el progreso, no otros campos
+      } as UpdatePlanDto);
+
+      // Actualizar directamente el campo de progreso en la base de datos
+      await this.planRepository['prisma'].readingPlan.update({
+        where: { id_plan: planId },
+        data: { progreso_porcentaje: stats.progressPercentage },
+      });
+
+      return stats.progressPercentage;
+    } catch (error) {
+      this.logger.error(`Error al actualizar porcentaje de progreso: ${error.message}`, error.stack);
+      return 0;
+    }
+  }
+
+  // Calcular estadísticas del historial
+  private calculateHistoryStatistics(progress: any[]): any {
+    if (!progress || progress.length === 0) {
+      return {
+        totalDias: 0,
+        diasCompletados: 0,
+        diasParciales: 0,
+        diasAtrasados: 0,
+        promedioTiempoDiario: 0,
+        promedioPaginasDiarias: 0,
+        rachaActual: 0,
+        mejorRacha: 0,
+      };
+    }
+
+    const totalDias = progress.length;
+    const diasCompletados = progress.filter(p => p.completado).length;
+    const diasParciales = progress.filter(p => p.estado_dia === DayStatusEnum.PARCIAL).length;
+    const diasAtrasados = progress.filter(p => p.estado_dia === DayStatusEnum.ATRASADO).length;
+
+    const promedioTiempoDiario = progress.reduce((sum, p) => sum + (p.tiempo_invertido_min || 0), 0) / totalDias;
+    const promedioPaginasDiarias = progress.reduce((sum, p) => sum + (p.paginas_leidas || 0), 0) / totalDias;
+
+    // Calcular racha actual (días completados consecutivos desde el final)
+    let rachaActual = 0;
+    for (let i = progress.length - 1; i >= 0; i--) {
+      if (progress[i].completado) {
+        rachaActual++;
+      } else {
+        break;
+      }
+    }
+
+    // Calcular mejor racha
+    let mejorRacha = 0;
+    let rachaTemp = 0;
+    for (const p of progress) {
+      if (p.completado) {
+        rachaTemp++;
+        mejorRacha = Math.max(mejorRacha, rachaTemp);
+      } else {
+        rachaTemp = 0;
+      }
+    }
+
+    return {
+      totalDias,
+      diasCompletados,
+      diasParciales,
+      diasAtrasados,
+      promedioTiempoDiario: Math.round(promedioTiempoDiario * 100) / 100,
+      promedioPaginasDiarias: Math.round(promedioPaginasDiarias * 100) / 100,
+      rachaActual,
+      mejorRacha,
+    };
   }
 }

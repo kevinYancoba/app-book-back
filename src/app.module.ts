@@ -7,6 +7,7 @@ import { BooksModule } from './books/books.module';
 import { PlanModule } from './plans/plan.module';
 import { PlanRepository } from './plans/plan-repository';
 import { PlanService } from './plans/services/plan.service';
+import { ReportModule } from './reports/report.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { PlanService } from './plans/services/plan.service';
     DatabaseModule,
     BooksModule,
     PlanModule,
+    ReportModule,
   ],
   controllers: [],
   providers: [PlanRepository,PlanService],

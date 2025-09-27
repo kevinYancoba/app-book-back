@@ -1,0 +1,183 @@
+### Pruebas para los endpoints de tracking de progreso
+### Asegúrate de tener un plan creado y conocer sus detalles
+
+@baseUrl = http://localhost:3000
+@contentType = application/json
+@planId = 1
+@progressId = 1
+
+### 1. Registrar progreso diario - Día completado
+POST {{baseUrl}}/plan/progress/daily
+Content-Type: {{contentType}}
+
+{
+  "planId": {{planId}},
+  "fecha": "2025-01-15",
+  "capitulosLeidos": [1, 2],
+  "paginasLeidas": 25,
+  "tiempoInvertidoMin": 60,
+  "estadoDia": "COMPLETADO",
+  "porcentajeDia": 100.0,
+  "notasDia": "Excelente día de lectura. Los primeros dos capítulos fueron muy interesantes y fáciles de seguir."
+}
+
+###
+
+### 2. Registrar progreso diario - Día parcial
+POST {{baseUrl}}/plan/progress/daily
+Content-Type: {{contentType}}
+
+{
+  "planId": {{planId}},
+  "fecha": "2025-01-16",
+  "paginasLeidas": 12,
+  "tiempoInvertidoMin": 30,
+  "estadoDia": "PARCIAL",
+  "porcentajeDia": 60.0,
+  "notasDia": "Solo pude leer la mitad del tiempo planificado debido a trabajo extra."
+}
+
+###
+
+### 3. Registrar progreso diario - Solo tiempo sin capítulos
+POST {{baseUrl}}/plan/progress/daily
+Content-Type: {{contentType}}
+
+{
+  "planId": {{planId}},
+  "fecha": "2025-01-17",
+  "tiempoInvertidoMin": 45,
+  "estadoDia": "PENDIENTE",
+  "porcentajeDia": 0.0,
+  "notasDia": "Tiempo de preparación y revisión, sin lectura nueva."
+}
+
+###
+
+### 4. Obtener historial de progreso completo
+GET {{baseUrl}}/plan/{{planId}}/progress/history
+Content-Type: {{contentType}}
+
+###
+
+### 5. Obtener historial limitado (últimos 7 días)
+GET {{baseUrl}}/plan/{{planId}}/progress/history?limit=7
+Content-Type: {{contentType}}
+
+###
+
+### 6. Actualizar progreso específico - Corregir tiempo
+PUT {{baseUrl}}/plan/progress/{{progressId}}
+Content-Type: {{contentType}}
+
+{
+  "tiempoInvertidoMin": 75,
+  "notasDia": "Tiempo corregido - incluye tiempo de notas y reflexión."
+}
+
+###
+
+### 7. Actualizar progreso específico - Cambiar estado
+PUT {{baseUrl}}/plan/progress/{{progressId}}
+Content-Type: {{contentType}}
+
+{
+  "estadoDia": "COMPLETADO",
+  "porcentajeDia": 100.0,
+  "paginasLeidas": 30
+}
+
+###
+
+### 8. Marcar capítulos como leídos - Básico
+POST {{baseUrl}}/plan/{{planId}}/chapters/mark-read
+Content-Type: {{contentType}}
+
+{
+  "detalleIds": [1, 2],
+  "tiempoRealMinutos": 45,
+  "notas": "Capítulos introductorios completados sin dificultad."
+}
+
+###
+
+### 9. Marcar capítulos como leídos - Con dificultad
+POST {{baseUrl}}/plan/{{planId}}/chapters/mark-read
+Content-Type: {{contentType}}
+
+{
+  "detalleIds": [3],
+  "tiempoRealMinutos": 90,
+  "dificultadPercibida": 4,
+  "notas": "Capítulo complejo que requirió más tiempo del estimado. Conceptos avanzados."
+}
+
+###
+
+### 10. Marcar múltiples capítulos como leídos
+POST {{baseUrl}}/plan/{{planId}}/chapters/mark-read
+Content-Type: {{contentType}}
+
+{
+  "detalleIds": [4, 5, 6],
+  "tiempoRealMinutos": 120,
+  "dificultadPercibida": 2,
+  "notas": "Sesión de lectura larga y productiva. Tres capítulos relacionados."
+}
+
+###
+
+### Casos de error para probar validaciones
+
+### 11. Progreso con fecha futura (debe fallar)
+POST {{baseUrl}}/plan/progress/daily
+Content-Type: {{contentType}}
+
+{
+  "planId": {{planId}},
+  "fecha": "2025-12-31",
+  "paginasLeidas": 10,
+  "tiempoInvertidoMin": 30
+}
+
+###
+
+### 12. Progreso completado con porcentaje bajo (debe fallar)
+POST {{baseUrl}}/plan/progress/daily
+Content-Type: {{contentType}}
+
+{
+  "planId": {{planId}},
+  "fecha": "2025-01-18",
+  "estadoDia": "COMPLETADO",
+  "porcentajeDia": 50.0
+}
+
+###
+
+### 13. Marcar capítulos con IDs inválidos (debe fallar)
+POST {{baseUrl}}/plan/{{planId}}/chapters/mark-read
+Content-Type: {{contentType}}
+
+{
+  "detalleIds": [999, 1000],
+  "tiempoRealMinutos": 30
+}
+
+###
+
+### 14. Actualizar progreso inexistente (debe fallar)
+PUT {{baseUrl}}/plan/progress/999
+Content-Type: {{contentType}}
+
+{
+  "paginasLeidas": 10
+}
+
+###
+
+### 15. Obtener historial de plan inexistente (debe fallar)
+GET {{baseUrl}}/plan/999/progress/history
+Content-Type: {{contentType}}
+
+###

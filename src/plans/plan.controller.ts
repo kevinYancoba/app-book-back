@@ -19,6 +19,16 @@ import { PerilLecturaDto } from 'src/books/dto/perfil-lectura.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
 import { UpdatePlanStatusDto } from './dto/plan-status.dto';
 import { PlanResponseDto, PlanDetailResponseDto } from './dto';
+import {
+  DailyProgressDto,
+  UpdateProgressDto,
+  MarkChapterReadDto
+} from './dto/progress-tracking.dto';
+import {
+  ProgressResponseDto,
+  ProgressHistoryDto,
+  ChapterMarkResponseDto
+} from './dto/progress-response.dto';
 
 @ApiTags('Plans')
 @Controller('plan')
@@ -126,5 +136,79 @@ export class PlanController {
   })
   async deletePlan(@Param('planId', ParseIntPipe) planId: number): Promise<any> {
     return await this.planService.deletePlan(planId);
+  }
+
+  // ==================== ENDPOINTS DE TRACKING DE PROGRESO ====================
+
+  @Post('progress/daily')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Registrar progreso diario',
+    description: 'Registra el progreso de lectura de un día específico'
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Progreso registrado exitosamente',
+    type: ProgressResponseDto
+  })
+  @UseInterceptors(new TransformDtoInterceptor())
+  async registerDailyProgress(@Body() progressData: DailyProgressDto): Promise<any> {
+    return await this.planService.registerDailyProgress(progressData);
+  }
+
+  @Get(':planId/progress/history')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Obtener historial de progreso',
+    description: 'Obtiene el historial completo de progreso de un plan con estadísticas'
+  })
+  @ApiParam({ name: 'planId', description: 'ID del plan', type: 'number' })
+  @ApiResponse({
+    status: 200,
+    description: 'Historial obtenido exitosamente',
+    type: ProgressHistoryDto
+  })
+  async getProgressHistory(@Param('planId', ParseIntPipe) planId: number): Promise<any> {
+    return await this.planService.getProgressHistory(planId);
+  }
+
+  @Put('progress/:progressId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Actualizar progreso específico',
+    description: 'Actualiza un registro de progreso específico'
+  })
+  @ApiParam({ name: 'progressId', description: 'ID del progreso', type: 'number' })
+  @ApiResponse({
+    status: 200,
+    description: 'Progreso actualizado exitosamente',
+    type: ProgressResponseDto
+  })
+  @UseInterceptors(new TransformDtoInterceptor())
+  async updateProgress(
+    @Param('progressId', ParseIntPipe) progressId: number,
+    @Body() updateData: UpdateProgressDto
+  ): Promise<any> {
+    return await this.planService.updateSpecificProgress(progressId, updateData);
+  }
+
+  @Post(':planId/chapters/mark-read')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Marcar capítulos como leídos',
+    description: 'Marca uno o más capítulos como completados y actualiza el progreso del plan'
+  })
+  @ApiParam({ name: 'planId', description: 'ID del plan', type: 'number' })
+  @ApiResponse({
+    status: 200,
+    description: 'Capítulos marcados exitosamente',
+    type: ChapterMarkResponseDto
+  })
+  @UseInterceptors(new TransformDtoInterceptor())
+  async markChaptersAsRead(
+    @Param('planId', ParseIntPipe) planId: number,
+    @Body() markData: MarkChapterReadDto
+  ): Promise<any> {
+    return await this.planService.markChaptersAsRead(planId, markData);
   }
 }
