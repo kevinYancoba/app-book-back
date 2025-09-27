@@ -1,0 +1,101 @@
+### Pruebas para los nuevos endpoints de gestión de planes
+### Asegúrate de tener un plan creado primero
+
+@baseUrl = http://localhost:3000
+@contentType = application/json
+@userId = 48
+@planId = 1
+
+### 1. Obtener todos los planes de un usuario
+GET {{baseUrl}}/plan/user/{{userId}}
+Content-Type: {{contentType}}
+
+###
+
+### 2. Obtener detalles específicos de un plan
+GET {{baseUrl}}/plan/{{planId}}
+Content-Type: {{contentType}}
+
+###
+
+### 3. Actualizar un plan existente
+PUT {{baseUrl}}/plan/{{planId}}
+Content-Type: {{contentType}}
+
+{
+  "titulo": "Mi Plan Personalizado de Lectura",
+  "descripcion": "Plan modificado para leer durante las vacaciones de verano",
+  "fechaFin": "2025-05-15T23:59:59Z",
+  "incluirFinesSemana": false,
+  "paginasPorDia": 8,
+  "tiempoEstimadoDia": 45
+}
+
+###
+
+### 4. Cambiar estado del plan a PAUSADO
+PATCH {{baseUrl}}/plan/{{planId}}/status
+Content-Type: {{contentType}}
+
+{
+  "estado": "PAUSADO"
+}
+
+###
+
+### 5. Cambiar estado del plan a ACTIVO
+PATCH {{baseUrl}}/plan/{{planId}}/status
+Content-Type: {{contentType}}
+
+{
+  "estado": "ACTIVO"
+}
+
+###
+
+### 6. Cambiar estado del plan a COMPLETADO
+PATCH {{baseUrl}}/plan/{{planId}}/status
+Content-Type: {{contentType}}
+
+{
+  "estado": "COMPLETADO"
+}
+
+###
+
+### 7. Eliminar un plan (CUIDADO: Esta acción es irreversible)
+# DELETE {{baseUrl}}/plan/{{planId}}
+# Content-Type: {{contentType}}
+
+###
+
+### Casos de error para probar validaciones
+
+### 8. Intentar obtener plan con ID inválido
+GET {{baseUrl}}/plan/999999
+Content-Type: {{contentType}}
+
+###
+
+### 9. Intentar actualizar con datos inválidos
+PUT {{baseUrl}}/plan/{{planId}}
+Content-Type: {{contentType}}
+
+{
+  "titulo": "",
+  "fechaFin": "2020-01-01T00:00:00Z",
+  "paginasPorDia": -5,
+  "tiempoEstimadoDia": 0
+}
+
+###
+
+### 10. Intentar cambiar a estado inválido
+PATCH {{baseUrl}}/plan/{{planId}}/status
+Content-Type: {{contentType}}
+
+{
+  "estado": "ESTADO_INVALIDO"
+}
+
+###

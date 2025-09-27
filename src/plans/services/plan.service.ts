@@ -2,6 +2,8 @@ import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { PlanRepository } from '../plan-repository';
 import { BooksService } from 'src/books/services/books.service';
 import { PerilLecturaDto } from 'src/books/dto/perfil-lectura.dto';
+import { UpdatePlanDto } from '../dto/update-plan.dto';
+import { PlanStatusEnum } from '../dto/plan-status.dto';
 
 @Injectable()
 export class PlanService {
@@ -235,6 +237,335 @@ export class PlanService {
       if (currentChapterIndex >= chapters.length) {
         break;
       }
+    }
+  }
+
+  // Obtener planes de un usuario
+  async getUserPlans(userId: number) {
+    try {
+      this.logger.log(`Obteniendo planes para usuario ${userId}`);
+
+      if (!userId || userId <= 0) {
+        throw new HttpException(
+          'ID de usuario inválido',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const plans = await this.planRepository.findUserPlans(userId);
+
+      if (!plans) {
+        throw new HttpException(
+          'Error al obtener los planes del usuario',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      // Calcular estadísticas para cada plan
+      const plansWithStats = await Promise.all(
+        plans.map(async (plan) => {
+          const stats = await this.calculatePlanStatistics(plan.id_plan);
+          return {
+            ...plan,
+            estadisticas: stats,
+          };
+        })
+      );
+
+      this.logger.log(`${plans.length} planes encontrados para usuario ${userId}`);
+      return plansWithStats;
+
+    } catch (error) {
+      this.logger.error(`Error al obtener planes del usuario: ${error.message}`, error.stack);
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        'Error interno al obtener los planes',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // Obtener plan específico con detalles
+  async getPlanDetails(planId: number, userId?: number) {
+    try {
+      this.logger.log(`Obteniendo detalles del plan ${planId}`);
+
+      if (!planId || planId <= 0) {
+        throw new HttpException(
+          'ID de plan inválido',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Verificar propiedad si se proporciona userId
+      if (userId) {
+        const isOwner = await this.planRepository.verifyPlanOwnership(planId, userId);
+        if (!isOwner) {
+          throw new HttpException(
+            'No tienes permisos para acceder a este plan',
+            HttpStatus.FORBIDDEN,
+          );
+        }
+      }
+
+      const plan = await this.planRepository.findPlanWithDetails(planId);
+
+      if (!plan) {
+        throw new HttpException(
+          'Plan no encontrado',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      // Calcular estadísticas del plan
+      const stats = await this.calculatePlanStatistics(planId);
+
+      this.logger.log(`Detalles del plan ${planId} obtenidos exitosamente`);
+      return {
+        ...plan,
+        estadisticas: stats,
+      };
+
+    } catch (error) {
+      this.logger.error(`Error al obtener detalles del plan: ${error.message}`, error.stack);
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        'Error interno al obtener los detalles del plan',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // Actualizar plan
+  async updatePlan(planId: number, updateData: UpdatePlanDto, userId?: number) {
+    try {
+      this.logger.log(`Actualizando plan ${planId}`);
+
+      if (!planId || planId <= 0) {
+        throw new HttpException(
+          'ID de plan inválido',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Verificar propiedad si se proporciona userId
+      if (userId) {
+        const isOwner = await this.planRepository.verifyPlanOwnership(planId, userId);
+        if (!isOwner) {
+          throw new HttpException(
+            'No tienes permisos para modificar este plan',
+            HttpStatus.FORBIDDEN,
+          );
+        }
+      }
+
+      // Validar datos de actualización
+      this.validateUpdateData(updateData);
+
+      const updatedPlan = await this.planRepository.updatePlan(planId, updateData);
+
+      if (!updatedPlan) {
+        throw new HttpException(
+          'Error al actualizar el plan',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      this.logger.log(`Plan ${planId} actualizado exitosamente`);
+      return updatedPlan;
+
+    } catch (error) {
+      this.logger.error(`Error al actualizar plan: ${error.message}`, error.stack);
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        'Error interno al actualizar el plan',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // Cambiar estado del plan
+  async updatePlanStatus(planId: number, status: PlanStatusEnum, userId?: number) {
+    try {
+      this.logger.log(`Cambiando estado del plan ${planId} a ${status}`);
+
+      if (!planId || planId <= 0) {
+        throw new HttpException(
+          'ID de plan inválido',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Verificar propiedad si se proporciona userId
+      if (userId) {
+        const isOwner = await this.planRepository.verifyPlanOwnership(planId, userId);
+        if (!isOwner) {
+          throw new HttpException(
+            'No tienes permisos para modificar este plan',
+            HttpStatus.FORBIDDEN,
+          );
+        }
+      }
+
+      const updatedPlan = await this.planRepository.updatePlanStatus(planId, status);
+
+      if (!updatedPlan) {
+        throw new HttpException(
+          'Error al cambiar el estado del plan',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      this.logger.log(`Estado del plan ${planId} cambiado a ${status}`);
+      return updatedPlan;
+
+    } catch (error) {
+      this.logger.error(`Error al cambiar estado del plan: ${error.message}`, error.stack);
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        'Error interno al cambiar el estado del plan',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // Eliminar plan
+  async deletePlan(planId: number, userId?: number) {
+    try {
+      this.logger.log(`Eliminando plan ${planId}`);
+
+      if (!planId || planId <= 0) {
+        throw new HttpException(
+          'ID de plan inválido',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Verificar propiedad si se proporciona userId
+      if (userId) {
+        const isOwner = await this.planRepository.verifyPlanOwnership(planId, userId);
+        if (!isOwner) {
+          throw new HttpException(
+            'No tienes permisos para eliminar este plan',
+            HttpStatus.FORBIDDEN,
+          );
+        }
+      }
+
+      const deletedPlan = await this.planRepository.deletePlan(planId);
+
+      if (!deletedPlan) {
+        throw new HttpException(
+          'Error al eliminar el plan',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      this.logger.log(`Plan ${planId} eliminado exitosamente`);
+      return { mensaje: 'Plan eliminado exitosamente', plan: deletedPlan };
+
+    } catch (error) {
+      this.logger.error(`Error al eliminar plan: ${error.message}`, error.stack);
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        'Error interno al eliminar el plan',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // Métodos auxiliares privados
+  private validateUpdateData(updateData: UpdatePlanDto): void {
+    if (updateData.fechaFin) {
+      const now = new Date();
+      if (updateData.fechaFin <= now) {
+        throw new HttpException(
+          'La fecha de finalización debe ser posterior a la fecha actual',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
+    if (updateData.paginasPorDia && updateData.paginasPorDia <= 0) {
+      throw new HttpException(
+        'Las páginas por día deben ser mayor a 0',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (updateData.tiempoEstimadoDia && updateData.tiempoEstimadoDia <= 0) {
+      throw new HttpException(
+        'El tiempo estimado por día debe ser mayor a 0',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  private async calculatePlanStatistics(planId: number) {
+    try {
+      // Obtener detalles del plan
+      const planDetails = await this.planRepository.findPlanWithDetails(planId);
+
+      if (!planDetails) {
+        return null;
+      }
+
+      const totalCapitulos = planDetails.detalleplanlectura.length;
+      const capitulosCompletados = planDetails.detalleplanlectura.filter(d => d.leido).length;
+
+      const totalPaginas = planDetails.detalleplanlectura.reduce((sum, detail) => {
+        const inicio = detail.pagina_inicio || 0;
+        const fin = detail.pagina_fin || 0;
+        return sum + Math.max(0, fin - inicio + 1);
+      }, 0);
+
+      const paginasLeidas = planDetails.detalleplanlectura
+        .filter(d => d.leido)
+        .reduce((sum, detail) => {
+          const inicio = detail.pagina_inicio || 0;
+          const fin = detail.pagina_fin || 0;
+          return sum + Math.max(0, fin - inicio + 1);
+        }, 0);
+
+      const fechaInicio = new Date(planDetails.fecha_inicio);
+      const fechaFin = new Date(planDetails.fecha_fin);
+      const ahora = new Date();
+
+      const diasTotales = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 3600 * 24));
+      const diasTranscurridos = Math.ceil((ahora.getTime() - fechaInicio.getTime()) / (1000 * 3600 * 24));
+      const diasRestantes = Math.max(0, diasTotales - diasTranscurridos);
+
+      return {
+        totalCapitulos,
+        capitulosCompletados,
+        totalPaginas,
+        paginasLeidas,
+        diasTranscurridos: Math.max(0, diasTranscurridos),
+        diasRestantes,
+      };
+    } catch (error) {
+      this.logger.error(`Error al calcular estadísticas: ${error.message}`, error.stack);
+      return null;
     }
   }
 }
