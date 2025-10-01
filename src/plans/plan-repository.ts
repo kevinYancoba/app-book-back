@@ -10,14 +10,15 @@ export class PlanRepository {
 
   constructor(private readonly prisma: DatabaseService) {}
 
-  async createPlan(userId: number, bookId: number, endDate: Date) {
+  async createPlan(userId: number, bookId: number, endDate: Date, profileId: number) {
     try {
-      this.logger.log(`Creando plan de lectura para usuario ${userId}, libro ${bookId}`);
+      this.logger.log(`Creando plan de lectura para usuario ${userId}, libro ${bookId}, perfil ${profileId}`);
 
       const newPlan = await this.prisma.readingPlan.create({
         data: {
           id: userId,
           id_libro: bookId,
+          id_perfil: profileId,
           fecha_inicio: new Date(),
           fecha_fin: endDate,
           fecha_fin_original: endDate,

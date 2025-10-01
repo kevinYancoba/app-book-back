@@ -20,7 +20,7 @@ export class BooksRepository {
       console.log("LOG", perfil.nivelLectura)
       const newPerfil = await this.prisma.readinProfile.create({
         data: {
-          id: perfil.idUsuario,
+          user_id: perfil.idUsuario,
           nivel_lectura: nivelLecturaNumerico,
           tiempo_lectura_diario: perfil.tiempoLecturaDiario,
           hora_preferida: perfil.horaioLectura,
@@ -28,16 +28,10 @@ export class BooksRepository {
         },
       });
 
-      this.logger.log(`Perfil de lectura creado exitosamente para usuario ${perfil.idUsuario}`);
+      this.logger.log(`Perfil de lectura creado exitosamente con ID: ${newPerfil.id_perfil} para usuario ${perfil.idUsuario}`);
       return newPerfil;
     } catch (error) {
       this.logger.error(`Error al crear perfil de lectura: ${error.message}`, error.stack);
-
-      // Si es un error de constraint único, es más específico
-      if (error.code === 'P2002') {
-        this.logger.warn(`El usuario ${perfil.idUsuario} ya tiene un perfil de lectura`);
-      }
-
       return undefined;
     }
   }

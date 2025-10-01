@@ -30,12 +30,12 @@ export class BooksService {
       // Validar datos de entrada
       this.validatePerfilInput(perfil);
 
-      // Crear perfil de lectura
+      // Crear perfil de lectura (ahora permite múltiples perfiles por usuario)
       const newPerfil = await this.bookRepository.createPerfil(perfil);
       if (!newPerfil) {
         throw new HttpException(
-          'Error al crear el perfil de lectura. Verifique que el usuario no tenga ya un perfil.',
-          HttpStatus.BAD_REQUEST,
+          'Error al crear el perfil de lectura.',
+          HttpStatus.INTERNAL_SERVER_ERROR,
         );
       }
 
@@ -55,8 +55,13 @@ export class BooksService {
         newBook.id_libro,
       );
 
-      this.logger.log(`Libro creado exitosamente con ID: ${newBook.id_libro}`);
-      return newBook;
+      this.logger.log(`Libro creado exitosamente con ID: ${newBook.id_libro} y perfil ID: ${newPerfil.id_perfil}`);
+
+      // Retornar tanto el libro como el perfil para usar en la creación del plan
+      return {
+        book: newBook,
+        profile: newPerfil
+      };
     } catch (error) {
       this.logger.error(`Error al crear perfil: ${error.message}`, error.stack);
 

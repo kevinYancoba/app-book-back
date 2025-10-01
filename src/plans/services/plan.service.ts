@@ -30,13 +30,15 @@ export class PlanService {
       const { nivelLectura, fechaFin } = perfil;
 
       // Crear perfil y libro
-      const book = await this.bookService.cretePerfil(perfil);
-      if (!book) {
+      const result = await this.bookService.cretePerfil(perfil);
+      if (!result || !result.book || !result.profile) {
         throw new HttpException(
-          'Error al crear el libro',
+          'Error al crear el libro y perfil',
           HttpStatus.INTERNAL_SERVER_ERROR,
         );
       }
+
+      const { book, profile } = result;
 
       // Obtener capítulos
       const chapters = await this.bookService.getChapters(book.id_libro);
@@ -94,6 +96,7 @@ export class PlanService {
         perfil.idUsuario,
         book.id_libro,
         finalEndDate,
+        profile.id_perfil,
       );
 
       if (!newPlan) {
