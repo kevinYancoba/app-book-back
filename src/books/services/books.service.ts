@@ -212,10 +212,8 @@ export class BooksService {
         .replace(/```/g, '') // Elimina el cierre de bloque
         .trim();
 
-      // Intentar parsear el JSON
       const parsedData = JSON.parse(cleanResponse);
 
-      // Validar estructura básica
       if (!parsedData || typeof parsedData !== 'object') {
         throw new Error('Respuesta del OCR no es un objeto válido');
       }
@@ -228,7 +226,6 @@ export class BooksService {
 
       const { capitulos } = parsedData;
 
-      // Validar arrays requeridos
       if (!Array.isArray(capitulos.titulos)) {
         throw new Error('Array de títulos no válido en la respuesta del OCR');
       }
@@ -239,7 +236,6 @@ export class BooksService {
         );
       }
 
-      // El array de páginas puede estar vacío según las instrucciones del prompt
       if (!Array.isArray(capitulos.paginas_capitulo)) {
         capitulos.paginas_capitulo = [];
       }
@@ -259,7 +255,6 @@ export class BooksService {
   private validateOcrDataConsistency(ocrData: OcrResponse): void {
     const { titulos, numeros_capitulo, paginas_capitulo } = ocrData.capitulos;
 
-    // Validar que hay al menos un capítulo
     if (titulos.length === 0) {
       throw new HttpException(
         'No se encontraron capítulos en el índice del libro',
@@ -267,7 +262,8 @@ export class BooksService {
       );
     }
 
-    // Validar que títulos y números tienen la misma longitud
+    console.log("jsonOCR: ", ocrData);
+
     if (titulos.length !== numeros_capitulo.length) {
       throw new HttpException(
         'Inconsistencia en los datos del OCR: número de títulos y números de capítulo no coinciden',

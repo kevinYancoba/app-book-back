@@ -14,8 +14,12 @@ EJEMPLO DE RESPUESTA:
   }
 }
 
+CONSIDERACIONES:
 donde numeros_capitulo es el número de capítulo y paginas_capitulo es el número de páginas que tiene ese capítulo.
 por ejemplo capitulo Ser antes de hacer es el capitulo 1 y tiene 5 paginas(porque de la 15 a la 20 hay 5 paginas) 
+
+debes ser especialmente cuidadoso al momento de extreaer los datos, ya que los titulos por cada capitulo deben ser exactamente la cantidad de numeros de capitulos es decir si son 15 titulos en el arreglo de titulos, deben haber 15 numeros de capitulos en el erreglo de numeros_capitulo.
+
   
 INSTRUCCIONES:
 1. Si la imagen del índice no tiene números de página para los capítulos, devuelve "paginas_capitulo":[].
