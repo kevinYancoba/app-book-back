@@ -207,8 +207,8 @@ export class PlanRepository {
       mappedData.incluir_fines_semana = updateData.incluirFinesSemana;
     }
 
-    if (updateData.paginasPorDia !== undefined) {
-      mappedData.paginas_por_dia = updateData.paginasPorDia;
+    if (updateData.nivelLectura !== undefined) {
+      mappedData.paginas_por_dia = updateData.nivelLectura;
     }
 
     if (updateData.tiempoEstimadoDia !== undefined) {

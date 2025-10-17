@@ -47,12 +47,12 @@ export class UpdatePlanDto {
   descripcion?: string;
 
   // NOTA: La fecha de finalización se calcula automáticamente cuando se modifican
-  // parámetros críticos (nivelLectura, paginasPorDia, tiempoEstimadoDia, incluirFinesSemana).
+  // parámetros críticos (nivelLectura, tiempoEstimadoDia, incluirFinesSemana).
   // Este campo se mantiene por compatibilidad pero será ignorado si se proporcionan
   // los parámetros críticos mencionados.
   @ApiProperty({
     example: '2025-04-15T23:59:59Z',
-    description: '[DEPRECADO] La fecha de finalización se calcula automáticamente. Este campo será ignorado si se proporcionan nivelLectura, paginasPorDia o tiempoEstimadoDia.',
+    description: '[DEPRECADO] La fecha de finalización se calcula automáticamente. Este campo será ignorado si se proporcionan nivelLectura o tiempoEstimadoDia.',
     type: String,
     format: 'date-time',
     required: false,
@@ -80,36 +80,8 @@ export class UpdatePlanDto {
   incluirFinesSemana?: boolean;
 
   @ApiProperty({
-    example: 10,
-    description: 'Nuevo número de páginas por día',
-    required: false,
-    minimum: 1,
-    maximum: 100
-  })
-  @IsOptional()
-  @IsNumber({}, { message: 'Las páginas por día deben ser un número' })
-  @Min(1, { message: 'Debe leer al menos 1 página por día' })
-  @Max(100, { message: 'No se pueden leer más de 100 páginas por día' })
-  @Type(() => Number)
-  paginasPorDia?: number;
-
-  @ApiProperty({
-    example: 60,
-    description: 'Nuevo tiempo estimado de lectura por día en minutos',
-    required: false,
-    minimum: 5,
-    maximum: 480
-  })
-  @IsOptional()
-  @IsNumber({}, { message: 'El tiempo estimado debe ser un número' })
-  @Min(5, { message: 'El tiempo mínimo de lectura es 5 minutos' })
-  @Max(480, { message: 'El tiempo máximo de lectura es 8 horas (480 minutos)' })
-  @Type(() => Number)
-  tiempoEstimadoDia?: number;
-
-  @ApiProperty({
     example: 'intermedio',
-    description: 'Nuevo nivel de lectura del usuario (páginas por día). Si se proporciona, sobrescribe paginasPorDia',
+    description: 'Nuevo nivel de lectura del usuario que determina las páginas por día (novato=5, intermedio=10, profesional=15, experto=20)',
     enum: ['novato', 'intermedio', 'profesional', 'experto'],
     required: false
   })
@@ -130,6 +102,20 @@ export class UpdatePlanDto {
     return value;
   })
   nivelLectura?: NivelLecturaEnum;
+
+  @ApiProperty({
+    example: 60,
+    description: 'Nuevo tiempo estimado de lectura por día en minutos',
+    required: false,
+    minimum: 5,
+    maximum: 480
+  })
+  @IsOptional()
+  @IsNumber({}, { message: 'El tiempo estimado debe ser un número' })
+  @Min(5, { message: 'El tiempo mínimo de lectura es 5 minutos' })
+  @Max(480, { message: 'El tiempo máximo de lectura es 8 horas (480 minutos)' })
+  @Type(() => Number)
+  tiempoEstimadoDia?: number;
 
   @ApiProperty({
     example: '20:00:00',

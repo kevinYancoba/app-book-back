@@ -109,7 +109,7 @@ export class PlanService {
 
       // Actualizar el plan con los valores validados
       await this.planRepository.updatePlan(newPlan.id_plan, {
-        paginasPorDia: pagesPerDay,
+        nivelLectura: pagesPerDay,
         tiempoEstimadoDia: minutesPerDay,
         incluirFinesSemana: finesSemana,
       });
@@ -580,10 +580,9 @@ export class PlanService {
       // Detectar si hay cambios críticos que requieren regenerar detalles
       const criticalChanges = this.detectCriticalChanges(updateData, currentPlan);
 
-      // Si nivelLectura está presente, convertirlo a paginasPorDia
+      // Log si se actualiza el nivel de lectura
       if (updateData.nivelLectura !== undefined) {
-        updateData.paginasPorDia = updateData.nivelLectura;
-        this.logger.log(`Nivel de lectura convertido a ${updateData.paginasPorDia} páginas por día`);
+        this.logger.log(`Nivel de lectura actualizado a ${updateData.nivelLectura} páginas por día`);
       }
 
       // Determinar si se debe regenerar (por defecto true si hay cambios críticos)
@@ -758,13 +757,6 @@ export class PlanService {
       }
     }
 
-    if (updateData.paginasPorDia && updateData.paginasPorDia <= 0) {
-      throw new HttpException(
-        'Las páginas por día deben ser mayor a 0',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
     if (updateData.tiempoEstimadoDia && updateData.tiempoEstimadoDia <= 0) {
       throw new HttpException(
         'El tiempo estimado por día debe ser mayor a 0',
@@ -787,11 +779,6 @@ export class PlanService {
     if (updateData.fechaFin &&
         updateData.fechaFin.getTime() !== new Date(currentPlan.fecha_fin).getTime()) {
       criticalFields.push('fechaFin');
-    }
-
-    if (updateData.paginasPorDia &&
-        updateData.paginasPorDia !== currentPlan.paginas_por_dia) {
-      criticalFields.push('paginasPorDia');
     }
 
     if (updateData.nivelLectura &&
@@ -851,9 +838,8 @@ export class PlanService {
       // ========== NUEVA LÓGICA: Determinar parámetros con validación de realismo ==========
       const startDate = new Date(currentPlan.fecha_inicio);
 
-      // Determinar nivel de lectura (páginas por día)
-      const nivelLectura = updateData.paginasPorDia ||
-                           updateData.nivelLectura ||
+      // Determinar nivel de lectura (páginas por día) - Solo desde nivelLectura
+      const nivelLectura = updateData.nivelLectura ||
                            currentPlan.paginas_por_dia || 10;
 
       // Determinar tiempo diario
@@ -909,7 +895,7 @@ export class PlanService {
       const planUpdateData: UpdatePlanDto = {
         ...updateData,
         fechaFin: finalEndDate,
-        paginasPorDia: pagesPerDay,
+        nivelLectura: pagesPerDay,
         tiempoEstimadoDia: minutesPerDay,
         incluirFinesSemana: includeWeekends,
       };
