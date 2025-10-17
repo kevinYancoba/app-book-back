@@ -376,20 +376,74 @@ export class PlanService {
         }
       }
 
-      // Validar datos de actualización
-      this.validateUpdateData(updateData);
-
-      const updatedPlan = await this.planRepository.updatePlan(planId, updateData);
-
-      if (!updatedPlan) {
+      // Obtener plan actual con todos sus detalles
+      const currentPlan = await this.planRepository.findPlanWithDetails(planId);
+      if (!currentPlan) {
         throw new HttpException(
-          'Error al actualizar el plan',
-          HttpStatus.INTERNAL_SERVER_ERROR,
+          'Plan no encontrado',
+          HttpStatus.NOT_FOUND,
         );
       }
 
-      this.logger.log(`Plan ${planId} actualizado exitosamente`);
-      return updatedPlan;
+      // Validar que el plan no esté completado
+      if (currentPlan.estado === 'COMPLETADO') {
+        throw new HttpException(
+          'No se puede modificar un plan completado',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Validar datos de actualización
+      this.validateUpdateData(updateData, currentPlan);
+
+      // Detectar si hay cambios críticos que requieren regenerar detalles
+      const criticalChanges = this.detectCriticalChanges(updateData, currentPlan);
+
+      // Si nivelLectura está presente, convertirlo a paginasPorDia
+      if (updateData.nivelLectura !== undefined) {
+        updateData.paginasPorDia = updateData.nivelLectura;
+        this.logger.log(`Nivel de lectura convertido a ${updateData.paginasPorDia} páginas por día`);
+      }
+
+      // Determinar si se debe regenerar (por defecto true si hay cambios críticos)
+      const shouldRegenerate = updateData.regenerarDetalles !== false && criticalChanges;
+
+      if (shouldRegenerate && criticalChanges) {
+        this.logger.warn(`Cambios críticos detectados. Regenerando detalles del plan ${planId}`);
+
+        // Regenerar plan completo
+        const result = await this.regeneratePlanDetails(
+          planId,
+          currentPlan,
+          updateData,
+        );
+
+        return result;
+      } else {
+        // Solo actualizar campos del plan sin regenerar detalles
+        this.logger.log(`Actualizando solo metadata del plan ${planId}`);
+
+        const updatedPlan = await this.planRepository.updatePlan(planId, updateData);
+
+        if (!updatedPlan) {
+          throw new HttpException(
+            'Error al actualizar el plan',
+            HttpStatus.INTERNAL_SERVER_ERROR,
+          );
+        }
+
+        // Actualizar perfil de lectura si es necesario
+        if (currentPlan.id_perfil && (updateData.nivelLectura || updateData.horaPreferida)) {
+          await this.updateAssociatedProfile(currentPlan.id_perfil, updateData);
+        }
+
+        this.logger.log(`Plan ${planId} actualizado exitosamente`);
+        return {
+          mensaje: 'Plan actualizado exitosamente',
+          plan: updatedPlan,
+          cambiosCriticos: false,
+        };
+      }
 
     } catch (error) {
       this.logger.error(`Error al actualizar plan: ${error.message}`, error.stack);
@@ -504,12 +558,20 @@ export class PlanService {
   }
 
   // Métodos auxiliares privados
-  private validateUpdateData(updateData: UpdatePlanDto): void {
+  private validateUpdateData(updateData: UpdatePlanDto, currentPlan?: any): void {
     if (updateData.fechaFin) {
       const now = new Date();
       if (updateData.fechaFin <= now) {
         throw new HttpException(
           'La fecha de finalización debe ser posterior a la fecha actual',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Validar que la nueva fecha no sea anterior a la fecha de inicio
+      if (currentPlan && updateData.fechaFin < currentPlan.fecha_inicio) {
+        throw new HttpException(
+          'La fecha de finalización no puede ser anterior a la fecha de inicio del plan',
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -527,6 +589,218 @@ export class PlanService {
         'El tiempo estimado por día debe ser mayor a 0',
         HttpStatus.BAD_REQUEST,
       );
+    }
+
+    if (updateData.nivelLectura && updateData.nivelLectura <= 0) {
+      throw new HttpException(
+        'El nivel de lectura debe ser mayor a 0',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  // Detectar si hay cambios críticos que requieren regenerar detalles
+  private detectCriticalChanges(updateData: UpdatePlanDto, currentPlan: any): boolean {
+    const criticalFields: string[] = [];
+
+    if (updateData.fechaFin &&
+        updateData.fechaFin.getTime() !== new Date(currentPlan.fecha_fin).getTime()) {
+      criticalFields.push('fechaFin');
+    }
+
+    if (updateData.paginasPorDia &&
+        updateData.paginasPorDia !== currentPlan.paginas_por_dia) {
+      criticalFields.push('paginasPorDia');
+    }
+
+    if (updateData.nivelLectura &&
+        updateData.nivelLectura !== currentPlan.paginas_por_dia) {
+      criticalFields.push('nivelLectura');
+    }
+
+    if (updateData.incluirFinesSemana !== undefined &&
+        updateData.incluirFinesSemana !== currentPlan.incluir_fines_semana) {
+      criticalFields.push('incluirFinesSemana');
+    }
+
+    if (updateData.tiempoEstimadoDia &&
+        updateData.tiempoEstimadoDia !== currentPlan.tiempo_estimado_dia) {
+      criticalFields.push('tiempoEstimadoDia');
+    }
+
+    if (criticalFields.length > 0) {
+      this.logger.log(`Campos críticos modificados: ${criticalFields.join(', ')}`);
+      return true;
+    }
+
+    return false;
+  }
+
+  // Regenerar detalles del plan cuando hay cambios críticos
+  private async regeneratePlanDetails(
+    planId: number,
+    currentPlan: any,
+    updateData: UpdatePlanDto,
+  ) {
+    try {
+      this.logger.log(`Iniciando regeneración de detalles para plan ${planId}`);
+
+      // Verificar si hay progreso registrado
+      const progressRecords = await this.planRepository.getProgressHistory(planId);
+      const hasProgress = progressRecords && progressRecords.length > 0;
+
+      if (hasProgress) {
+        this.logger.warn(`Plan ${planId} tiene progreso registrado. Preservando días completados.`);
+      }
+
+      // Obtener capítulos del libro
+      const chapters = await this.bookService.getChapters(currentPlan.id_libro);
+      if (!chapters || chapters.length === 0) {
+        throw new HttpException(
+          'No se pudieron obtener los capítulos del libro',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Calcular páginas totales
+      const totalPages = chapters.reduce((sum, chapter) => {
+        return sum + (chapter.paginas_estimadas || 0);
+      }, 0);
+
+      // Determinar parámetros finales
+      const startDate = new Date(currentPlan.fecha_inicio);
+      const endDate = updateData.fechaFin || new Date(currentPlan.fecha_fin);
+      const pagesPerDay = updateData.paginasPorDia ||
+                          updateData.nivelLectura ||
+                          currentPlan.paginas_por_dia || 10;
+      const includeWeekends = updateData.incluirFinesSemana !== undefined
+                              ? updateData.incluirFinesSemana
+                              : currentPlan.incluir_fines_semana;
+      const dailyTime = updateData.tiempoEstimadoDia ||
+                        currentPlan.tiempo_estimado_dia || 30;
+
+      // Calcular días disponibles
+      const daysAvailable = Math.ceil(
+        (endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24),
+      );
+
+      const pagesPerDayRequired = Math.ceil(totalPages / daysAvailable);
+
+      let finalDays = daysAvailable;
+      let finalPagesPerDay = pagesPerDay;
+      let adjustedPlan = false;
+
+      // Ajustar plan si excede la capacidad
+      if (pagesPerDayRequired > pagesPerDay) {
+        finalDays = Math.ceil(totalPages / pagesPerDay);
+        finalPagesPerDay = pagesPerDay;
+        adjustedPlan = true;
+        this.logger.warn(`Plan ajustado: de ${daysAvailable} a ${finalDays} días`);
+      }
+
+      // Eliminar detalles existentes no completados
+      const uncompletedDetails = await this.planRepository.getUncompletedPlanDetails(planId);
+      if (uncompletedDetails && uncompletedDetails.length > 0) {
+        await this.planRepository.deletePlanDetails(planId);
+        this.logger.log(`${uncompletedDetails.length} detalles no completados eliminados`);
+      }
+
+      // Actualizar el plan principal
+      const finalEndDate = new Date(startDate.getTime() + finalDays * 24 * 3600 * 1000);
+      const planUpdateData: UpdatePlanDto = {
+        ...updateData,
+        fechaFin: adjustedPlan ? finalEndDate : endDate,
+        paginasPorDia: finalPagesPerDay,
+        tiempoEstimadoDia: dailyTime,
+        incluirFinesSemana: includeWeekends,
+      };
+
+      const updatedPlan = await this.planRepository.updatePlan(planId, planUpdateData);
+
+      if (!updatedPlan) {
+        throw new HttpException(
+          'Error al actualizar el plan',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      // Generar nuevos detalles
+      await this.generatePlanDetails(
+        planId,
+        chapters,
+        startDate,
+        finalDays,
+        finalPagesPerDay,
+        {
+          finesSemana: includeWeekends,
+          tiempoLecturaDiario: dailyTime,
+        } as any,
+      );
+
+      // Actualizar perfil de lectura si existe
+      if (currentPlan.id_perfil) {
+        await this.updateAssociatedProfile(currentPlan.id_perfil, updateData);
+      }
+
+      this.logger.log(`Plan ${planId} regenerado exitosamente`);
+
+      return {
+        mensaje: adjustedPlan
+          ? `Plan regenerado y ajustado automáticamente (de ${daysAvailable} a ${finalDays} días)`
+          : 'Plan regenerado exitosamente',
+        plan: updatedPlan,
+        cambiosCriticos: true,
+        ajustado: adjustedPlan,
+        estadisticas: {
+          totalPaginas: totalPages,
+          diasPlanificados: finalDays,
+          paginasPorDia: finalPagesPerDay,
+          totalCapitulos: chapters.length,
+        },
+      };
+
+    } catch (error) {
+      this.logger.error(`Error al regenerar detalles del plan: ${error.message}`, error.stack);
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        'Error al regenerar los detalles del plan',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // Actualizar perfil de lectura asociado
+  private async updateAssociatedProfile(profileId: number, updateData: UpdatePlanDto) {
+    try {
+      const profileUpdateData: any = {};
+
+      if (updateData.nivelLectura !== undefined) {
+        profileUpdateData.nivel_lectura = updateData.nivelLectura;
+      }
+
+      if (updateData.tiempoEstimadoDia !== undefined) {
+        profileUpdateData.tiempo_lectura_diario = updateData.tiempoEstimadoDia;
+      }
+
+      if (updateData.horaPreferida !== undefined) {
+        profileUpdateData.hora_preferida = updateData.horaPreferida;
+      }
+
+      if (updateData.incluirFinesSemana !== undefined) {
+        profileUpdateData.incluir_fines_de_semana = updateData.incluirFinesSemana;
+      }
+
+      if (Object.keys(profileUpdateData).length > 0) {
+        await this.planRepository.updateReadingProfile(profileId, profileUpdateData);
+        this.logger.log(`Perfil de lectura ${profileId} actualizado`);
+      }
+    } catch (error) {
+      this.logger.warn(`No se pudo actualizar el perfil de lectura: ${error.message}`);
+      // No lanzar error, es una operación secundaria
     }
   }
 

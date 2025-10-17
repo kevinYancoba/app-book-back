@@ -218,6 +218,73 @@ export class PlanRepository {
     return mappedData;
   }
 
+  // Eliminar todos los detalles de un plan
+  async deletePlanDetails(planId: number) {
+    try {
+      this.logger.log(`Eliminando detalles del plan ${planId}`);
+
+      const deletedDetails = await this.prisma.planDetail.deleteMany({
+        where: {
+          id_plan: planId,
+        },
+      });
+
+      this.logger.log(`${deletedDetails.count} detalles eliminados del plan ${planId}`);
+      return deletedDetails;
+    } catch (error) {
+      this.logger.error(`Error al eliminar detalles del plan: ${error.message}`, error.stack);
+      return undefined;
+    }
+  }
+
+  // Obtener detalles no completados de un plan
+  async getUncompletedPlanDetails(planId: number) {
+    try {
+      const details = await this.prisma.planDetail.findMany({
+        where: {
+          id_plan: planId,
+          leido: false,
+        },
+        orderBy: {
+          fecha_asignada: 'asc',
+        },
+      });
+
+      return details;
+    } catch (error) {
+      this.logger.error(`Error al obtener detalles no completados: ${error.message}`, error.stack);
+      return undefined;
+    }
+  }
+
+  // Actualizar perfil de lectura asociado al plan
+  async updateReadingProfile(profileId: number, updateData: {
+    nivel_lectura?: number;
+    tiempo_lectura_diario?: number;
+    hora_preferida?: Date;
+    incluir_fines_de_semana?: boolean;
+  }) {
+    try {
+      this.logger.log(`Actualizando perfil de lectura ${profileId}`);
+
+      const updatedProfile = await this.prisma.readinProfile.update({
+        where: {
+          id_perfil: profileId,
+        },
+        data: {
+          ...updateData,
+          updated_at: new Date(),
+        },
+      });
+
+      this.logger.log(`Perfil ${profileId} actualizado exitosamente`);
+      return updatedProfile;
+    } catch (error) {
+      this.logger.error(`Error al actualizar perfil: ${error.message}`, error.stack);
+      return undefined;
+    }
+  }
+
   // Cambiar estado del plan
   async updatePlanStatus(planId: number, status: PlanStatusEnum) {
     try {

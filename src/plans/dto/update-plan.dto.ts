@@ -5,11 +5,20 @@ import {
   IsDateString,
   IsBoolean,
   IsNumber,
+  IsEnum,
   Min,
   Max,
   Length,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+
+// Enum para nivel de lectura (debe coincidir con el de PerilLecturaDto)
+export enum NivelLecturaEnum {
+  novato = 5,
+  intermedio = 10,
+  profesional = 15,
+  experto = 20,
+}
 
 export class UpdatePlanDto {
   @ApiProperty({
@@ -76,6 +85,7 @@ export class UpdatePlanDto {
   @IsNumber({}, { message: 'Las páginas por día deben ser un número' })
   @Min(1, { message: 'Debe leer al menos 1 página por día' })
   @Max(100, { message: 'No se pueden leer más de 100 páginas por día' })
+  @Type(() => Number)
   paginasPorDia?: number;
 
   @ApiProperty({
@@ -89,5 +99,58 @@ export class UpdatePlanDto {
   @IsNumber({}, { message: 'El tiempo estimado debe ser un número' })
   @Min(5, { message: 'El tiempo mínimo de lectura es 5 minutos' })
   @Max(480, { message: 'El tiempo máximo de lectura es 8 horas (480 minutos)' })
+  @Type(() => Number)
   tiempoEstimadoDia?: number;
+
+  @ApiProperty({
+    example: 'intermedio',
+    description: 'Nuevo nivel de lectura del usuario (páginas por día). Si se proporciona, sobrescribe paginasPorDia',
+    enum: ['novato', 'intermedio', 'profesional', 'experto'],
+    required: false
+  })
+  @IsOptional()
+  @IsEnum(NivelLecturaEnum, {
+    message: 'Nivel de lectura inválido. Debe ser: novato, intermedio, profesional o experto'
+  })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      const niveles = {
+        'novato': NivelLecturaEnum.novato,
+        'intermedio': NivelLecturaEnum.intermedio,
+        'profesional': NivelLecturaEnum.profesional,
+        'experto': NivelLecturaEnum.experto
+      };
+      return niveles[value.toLowerCase()];
+    }
+    return value;
+  })
+  nivelLectura?: NivelLecturaEnum;
+
+  @ApiProperty({
+    example: '20:00:00',
+    description: 'Nueva hora preferida para la lectura',
+    type: String,
+    format: 'time',
+    required: false
+  })
+  @IsOptional()
+  @Transform(({ value }) => value ? new Date(value) : undefined)
+  horaPreferida?: Date;
+
+  @ApiProperty({
+    example: true,
+    description: 'Si se debe regenerar automáticamente los detalles del plan cuando cambian parámetros críticos',
+    required: false,
+    default: true
+  })
+  @IsOptional()
+  @IsBoolean({ message: 'La opción de regenerar debe ser verdadero o falso' })
+  @Transform(({ value }) => {
+    if (value === undefined || value === null) return true; // Por defecto true
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true';
+    }
+    return Boolean(value);
+  })
+  regenerarDetalles?: boolean;
 }
