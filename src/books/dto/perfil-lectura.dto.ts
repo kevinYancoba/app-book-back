@@ -79,16 +79,13 @@ export class PerilLecturaDto {
   @Transform(({ value }) => new Date(value))
   horaioLectura: Date;
 
-  @ApiProperty({
-    example: '2025-10-20T20:00:00Z',
-    description: 'Fecha de finalización estimada del libro.',
-    type: String,
-    format: 'date-time',
-  })
-  @IsNotEmpty({ message: 'La fecha de finalización es requerida' })
-  // @IsDateString({}, { message: 'La fecha de finalización debe ser una fecha válida' })
-  @Transform(({ value }) => new Date(value))
-  fechaFin: Date;
+  // NOTA: La fecha de finalización (fechaFin) se calcula automáticamente por el sistema
+  // basándose en:
+  // - nivelLectura (páginas por día según el nivel: novato=5, intermedio=10, profesional=15, experto=20)
+  // - tiempoLecturaDiario (minutos disponibles por día)
+  // - Total de páginas del libro (extraído del OCR)
+  // - finesSemana (si se incluyen o no los fines de semana)
+  // El sistema valida que la relación tiempo/páginas sea realista y ajusta automáticamente si es necesario.
 
   @ApiProperty({
     example: true,

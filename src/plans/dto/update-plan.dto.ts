@@ -46,12 +46,17 @@ export class UpdatePlanDto {
   @Transform(({ value }) => value?.trim())
   descripcion?: string;
 
+  // NOTA: La fecha de finalización se calcula automáticamente cuando se modifican
+  // parámetros críticos (nivelLectura, paginasPorDia, tiempoEstimadoDia, incluirFinesSemana).
+  // Este campo se mantiene por compatibilidad pero será ignorado si se proporcionan
+  // los parámetros críticos mencionados.
   @ApiProperty({
     example: '2025-04-15T23:59:59Z',
-    description: 'Nueva fecha de finalización del plan',
+    description: '[DEPRECADO] La fecha de finalización se calcula automáticamente. Este campo será ignorado si se proporcionan nivelLectura, paginasPorDia o tiempoEstimadoDia.',
     type: String,
     format: 'date-time',
-    required: false
+    required: false,
+    deprecated: true
   })
   @IsOptional()
   // @IsDateString({}, { message: 'La fecha de finalización debe ser una fecha válida' })

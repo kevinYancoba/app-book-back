@@ -27,7 +27,7 @@ export class PlanService {
       // Validaciones iniciales
       this.validatePlanInput(perfil);
 
-      const { nivelLectura, fechaFin } = perfil;
+      const { nivelLectura, tiempoLecturaDiario, finesSemana } = perfil;
 
       // Crear perfil y libro
       const result = await this.bookService.cretePerfil(perfil);
@@ -61,37 +61,38 @@ export class PlanService {
         );
       }
 
-      // Calcular fechas y días disponibles
-      const startDate = new Date();
-      const endDate = new Date(fechaFin);
+      this.logger.log(`Libro con ${totalPages} páginas totales`);
 
-      if (endDate <= startDate) {
-        throw new HttpException(
-          'La fecha de finalización debe ser posterior a la fecha actual',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-
-      const daysAvailable = Math.ceil(
-        (endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24),
+      // ========== NUEVA LÓGICA: Validar y ajustar capacidad de lectura ==========
+      const validatedCapacity = this.validateAndAdjustReadingCapacity(
+        nivelLectura,
+        tiempoLecturaDiario,
       );
 
-      const pagesPerDayRequired = Math.ceil(totalPages / daysAvailable);
+      const { pagesPerDay, minutesPerDay, adjusted, adjustmentReason } = validatedCapacity;
 
-      let finalDays = daysAvailable;
-      let pagesPerDay = pagesPerDayRequired;
-      let adjustedPlan = false;
+      // Calcular días necesarios basándose en páginas validadas
+      let daysNeeded = Math.ceil(totalPages / pagesPerDay);
 
-      // Ajustar plan si excede el nivel de lectura del usuario
-      if (pagesPerDayRequired > nivelLectura) {
-        finalDays = Math.ceil(totalPages / nivelLectura);
-        pagesPerDay = nivelLectura;
-        adjustedPlan = true;
-        this.logger.warn(`Plan ajustado: de ${daysAvailable} a ${finalDays} días`);
-      }
+      this.logger.log(
+        `Días necesarios calculados: ${daysNeeded} días ` +
+        `(${totalPages} páginas ÷ ${pagesPerDay} páginas/día)`
+      );
 
-      // Crear el plan principal
-      const finalEndDate = new Date(startDate.getTime() + finalDays * 24 * 3600 * 1000);
+      // Calcular fecha de finalización considerando fines de semana
+      const startDate = new Date();
+      const finalEndDate = this.calculateEndDateWithWeekends(
+        startDate,
+        daysNeeded,
+        finesSemana,
+      );
+
+      this.logger.log(
+        `Fecha de inicio: ${startDate.toISOString().split('T')[0]}, ` +
+        `Fecha de fin calculada: ${finalEndDate.toISOString().split('T')[0]}`
+      );
+
+      // Crear el plan principal con fecha calculada automáticamente
       const newPlan = await this.planRepository.createPlan(
         perfil.idUsuario,
         book.id_libro,
@@ -106,28 +107,44 @@ export class PlanService {
         );
       }
 
+      // Actualizar el plan con los valores validados
+      await this.planRepository.updatePlan(newPlan.id_plan, {
+        paginasPorDia: pagesPerDay,
+        tiempoEstimadoDia: minutesPerDay,
+        incluirFinesSemana: finesSemana,
+      });
+
       // Generar detalles del plan
       await this.generatePlanDetails(
         newPlan.id_plan,
         chapters,
         startDate,
-        finalDays,
+        daysNeeded,
         pagesPerDay,
         perfil,
       );
 
       this.logger.log(`Plan creado exitosamente con ID: ${newPlan.id_plan}`);
 
+      // Preparar mensaje de respuesta
+      let mensaje = 'Plan generado exitosamente';
+      if (adjusted) {
+        mensaje = `Plan creado con ajustes automáticos para garantizar realismo. ${adjustmentReason}`;
+      }
+
       return {
-        mensaje: adjustedPlan
-          ? `Plan ajustado automáticamente (de ${daysAvailable} a ${finalDays} días)`
-          : 'Plan generado exitosamente',
+        mensaje,
         plan: newPlan,
         estadisticas: {
           totalPaginas: totalPages,
-          diasPlanificados: finalDays,
+          diasPlanificados: daysNeeded,
           paginasPorDia: pagesPerDay,
+          tiempoEstimadoDia: minutesPerDay,
           totalCapitulos: chapters.length,
+          fechaInicio: startDate.toISOString().split('T')[0],
+          fechaFin: finalEndDate.toISOString().split('T')[0],
+          ajustado: adjusted,
+          razonAjuste: adjustmentReason,
         },
       };
     } catch (error) {
@@ -152,13 +169,6 @@ export class PlanService {
       );
     }
 
-    if (!perfil.fechaFin) {
-      throw new HttpException(
-        'Fecha de finalización es requerida',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
     if (!perfil.nivelLectura || perfil.nivelLectura <= 0) {
       throw new HttpException(
         'Nivel de lectura inválido',
@@ -172,6 +182,177 @@ export class PlanService {
         HttpStatus.BAD_REQUEST,
       );
     }
+  }
+
+  /**
+   * Valida que la relación entre tiempo de lectura y páginas por día sea realista.
+   * Si no es realista, ajusta automáticamente los valores.
+   *
+   * @param nivelLectura - Páginas por día según el nivel (5, 10, 15, 20)
+   * @param tiempoLecturaDiario - Minutos disponibles por día
+   * @returns Objeto con páginas y minutos validados/ajustados
+   */
+  private validateAndAdjustReadingCapacity(
+    nivelLectura: number,
+    tiempoLecturaDiario: number,
+  ): { pagesPerDay: number; minutesPerDay: number; adjusted: boolean; adjustmentReason?: string } {
+
+    // Definir perfiles de lectura realistas por nivel
+    // Cada nivel tiene un rango de minutos por página considerado realista
+    const readingProfiles = {
+      5: {   // Novato
+        min: 15,           // Mínimo tiempo total recomendado
+        optimal: 20,       // Tiempo óptimo total
+        max: 30,           // Máximo tiempo total recomendado
+        minPerPage: 3,     // Mínimo 3 minutos por página
+        maxPerPage: 6      // Máximo 6 minutos por página
+      },
+      10: {  // Intermedio
+        min: 20,
+        optimal: 30,
+        max: 45,
+        minPerPage: 2,
+        maxPerPage: 4.5
+      },
+      15: {  // Profesional
+        min: 25,
+        optimal: 35,
+        max: 60,
+        minPerPage: 1.5,
+        maxPerPage: 4
+      },
+      20: {  // Experto
+        min: 20,
+        optimal: 30,
+        max: 45,
+        minPerPage: 1,
+        maxPerPage: 2.25
+      }
+    };
+
+    const profile = readingProfiles[nivelLectura];
+
+    if (!profile) {
+      this.logger.warn(`Nivel de lectura ${nivelLectura} no reconocido, usando valores por defecto`);
+      return {
+        pagesPerDay: nivelLectura,
+        minutesPerDay: tiempoLecturaDiario,
+        adjusted: false
+      };
+    }
+
+    const minutesPerPage = tiempoLecturaDiario / nivelLectura;
+
+    let adjusted = false;
+    let finalMinutes = tiempoLecturaDiario;
+    let finalPages = nivelLectura;
+    let adjustmentReason = '';
+
+    // Validar si el tiempo por página es realista
+    if (minutesPerPage < profile.minPerPage) {
+      // Muy poco tiempo por página - ajustar tiempo hacia arriba
+      finalMinutes = Math.ceil(nivelLectura * profile.minPerPage);
+      adjusted = true;
+      adjustmentReason = `Tiempo ajustado de ${tiempoLecturaDiario} a ${finalMinutes} minutos. ` +
+        `Razón: ${minutesPerPage.toFixed(1)} min/página es muy rápido para nivel ${nivelLectura} páginas/día. ` +
+        `Se recomienda al menos ${profile.minPerPage} min/página.`;
+
+      this.logger.warn(adjustmentReason);
+
+    } else if (minutesPerPage > profile.maxPerPage) {
+      // Demasiado tiempo por página - reducir páginas por día
+      finalPages = Math.floor(tiempoLecturaDiario / profile.maxPerPage);
+
+      // Asegurar al menos 1 página por día
+      if (finalPages < 1) {
+        finalPages = 1;
+        finalMinutes = Math.ceil(profile.maxPerPage);
+      }
+
+      adjusted = true;
+      adjustmentReason = `Páginas por día ajustadas de ${nivelLectura} a ${finalPages}. ` +
+        `Razón: ${minutesPerPage.toFixed(1)} min/página es muy lento. ` +
+        `Se recomienda máximo ${profile.maxPerPage} min/página.`;
+
+      this.logger.warn(adjustmentReason);
+    }
+
+    // Validar que el tiempo total esté en rango aceptable
+    if (finalMinutes < profile.min) {
+      finalMinutes = profile.min;
+      adjusted = true;
+      adjustmentReason += ` Tiempo mínimo ajustado a ${profile.min} minutos.`;
+      this.logger.warn(`Tiempo ajustado al mínimo recomendado: ${profile.min} minutos`);
+
+    } else if (finalMinutes > profile.max) {
+      finalMinutes = profile.max;
+      adjusted = true;
+      adjustmentReason += ` Tiempo máximo ajustado a ${profile.max} minutos.`;
+      this.logger.warn(`Tiempo ajustado al máximo recomendado: ${profile.max} minutos`);
+    }
+
+    if (adjusted) {
+      this.logger.log(
+        `Capacidad de lectura ajustada: ${nivelLectura} páginas/${tiempoLecturaDiario} min ` +
+        `→ ${finalPages} páginas/${finalMinutes} min (${(finalMinutes/finalPages).toFixed(1)} min/página)`
+      );
+    } else {
+      this.logger.log(
+        `Capacidad de lectura validada: ${finalPages} páginas/${finalMinutes} min ` +
+        `(${minutesPerPage.toFixed(1)} min/página - dentro del rango realista)`
+      );
+    }
+
+    return {
+      pagesPerDay: finalPages,
+      minutesPerDay: finalMinutes,
+      adjusted,
+      adjustmentReason: adjusted ? adjustmentReason : undefined
+    };
+  }
+
+  /**
+   * Calcula la fecha de finalización considerando si se incluyen fines de semana o no.
+   *
+   * @param startDate - Fecha de inicio del plan
+   * @param daysNeeded - Días de lectura necesarios
+   * @param includeWeekends - Si se incluyen fines de semana
+   * @returns Fecha de finalización calculada
+   */
+  private calculateEndDateWithWeekends(
+    startDate: Date,
+    daysNeeded: number,
+    includeWeekends: boolean,
+  ): Date {
+    const endDate = new Date(startDate);
+    let daysAdded = 0;
+
+    if (includeWeekends) {
+      // Si se incluyen fines de semana, simplemente sumar los días
+      endDate.setDate(endDate.getDate() + daysNeeded);
+      this.logger.log(`Fecha fin calculada (con fines de semana): ${daysNeeded} días naturales`);
+    } else {
+      // Si NO se incluyen fines de semana, saltar sábados y domingos
+      while (daysAdded < daysNeeded) {
+        endDate.setDate(endDate.getDate() + 1);
+
+        // Solo contar días que no sean fin de semana (0 = Domingo, 6 = Sábado)
+        if (endDate.getDay() !== 0 && endDate.getDay() !== 6) {
+          daysAdded++;
+        }
+      }
+
+      const totalCalendarDays = Math.ceil(
+        (endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)
+      );
+
+      this.logger.log(
+        `Fecha fin calculada (sin fines de semana): ${daysNeeded} días de lectura = ` +
+        `${totalCalendarDays} días naturales`
+      );
+    }
+
+    return endDate;
   }
 
   private async generatePlanDetails(
@@ -667,36 +848,55 @@ export class PlanService {
         return sum + (chapter.paginas_estimadas || 0);
       }, 0);
 
-      // Determinar parámetros finales
+      // ========== NUEVA LÓGICA: Determinar parámetros con validación de realismo ==========
       const startDate = new Date(currentPlan.fecha_inicio);
-      const endDate = updateData.fechaFin || new Date(currentPlan.fecha_fin);
-      const pagesPerDay = updateData.paginasPorDia ||
-                          updateData.nivelLectura ||
-                          currentPlan.paginas_por_dia || 10;
+
+      // Determinar nivel de lectura (páginas por día)
+      const nivelLectura = updateData.paginasPorDia ||
+                           updateData.nivelLectura ||
+                           currentPlan.paginas_por_dia || 10;
+
+      // Determinar tiempo diario
+      const tiempoLecturaDiario = updateData.tiempoEstimadoDia ||
+                                  currentPlan.tiempo_estimado_dia || 30;
+
+      // Determinar si incluye fines de semana
       const includeWeekends = updateData.incluirFinesSemana !== undefined
                               ? updateData.incluirFinesSemana
                               : currentPlan.incluir_fines_semana;
-      const dailyTime = updateData.tiempoEstimadoDia ||
-                        currentPlan.tiempo_estimado_dia || 30;
 
-      // Calcular días disponibles
-      const daysAvailable = Math.ceil(
-        (endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24),
+      this.logger.log(
+        `Parámetros de actualización: ${nivelLectura} páginas/día, ` +
+        `${tiempoLecturaDiario} min/día, fines de semana: ${includeWeekends}`
       );
 
-      const pagesPerDayRequired = Math.ceil(totalPages / daysAvailable);
+      // Validar y ajustar capacidad de lectura
+      const validatedCapacity = this.validateAndAdjustReadingCapacity(
+        nivelLectura,
+        tiempoLecturaDiario,
+      );
 
-      let finalDays = daysAvailable;
-      let finalPagesPerDay = pagesPerDay;
-      let adjustedPlan = false;
+      const { pagesPerDay, minutesPerDay, adjusted, adjustmentReason } = validatedCapacity;
 
-      // Ajustar plan si excede la capacidad
-      if (pagesPerDayRequired > pagesPerDay) {
-        finalDays = Math.ceil(totalPages / pagesPerDay);
-        finalPagesPerDay = pagesPerDay;
-        adjustedPlan = true;
-        this.logger.warn(`Plan ajustado: de ${daysAvailable} a ${finalDays} días`);
-      }
+      // Calcular días necesarios basándose en páginas validadas
+      const daysNeeded = Math.ceil(totalPages / pagesPerDay);
+
+      this.logger.log(
+        `Días necesarios calculados: ${daysNeeded} días ` +
+        `(${totalPages} páginas ÷ ${pagesPerDay} páginas/día)`
+      );
+
+      // Calcular fecha de finalización considerando fines de semana
+      const finalEndDate = this.calculateEndDateWithWeekends(
+        startDate,
+        daysNeeded,
+        includeWeekends,
+      );
+
+      this.logger.log(
+        `Fecha de inicio: ${startDate.toISOString().split('T')[0]}, ` +
+        `Fecha de fin calculada: ${finalEndDate.toISOString().split('T')[0]}`
+      );
 
       // Eliminar detalles existentes no completados
       const uncompletedDetails = await this.planRepository.getUncompletedPlanDetails(planId);
@@ -705,13 +905,12 @@ export class PlanService {
         this.logger.log(`${uncompletedDetails.length} detalles no completados eliminados`);
       }
 
-      // Actualizar el plan principal
-      const finalEndDate = new Date(startDate.getTime() + finalDays * 24 * 3600 * 1000);
+      // Actualizar el plan principal con fecha calculada automáticamente
       const planUpdateData: UpdatePlanDto = {
         ...updateData,
-        fechaFin: adjustedPlan ? finalEndDate : endDate,
-        paginasPorDia: finalPagesPerDay,
-        tiempoEstimadoDia: dailyTime,
+        fechaFin: finalEndDate,
+        paginasPorDia: pagesPerDay,
+        tiempoEstimadoDia: minutesPerDay,
         incluirFinesSemana: includeWeekends,
       };
 
@@ -729,11 +928,11 @@ export class PlanService {
         planId,
         chapters,
         startDate,
-        finalDays,
-        finalPagesPerDay,
+        daysNeeded,
+        pagesPerDay,
         {
           finesSemana: includeWeekends,
-          tiempoLecturaDiario: dailyTime,
+          tiempoLecturaDiario: minutesPerDay,
         } as any,
       );
 
@@ -744,18 +943,26 @@ export class PlanService {
 
       this.logger.log(`Plan ${planId} regenerado exitosamente`);
 
+      // Preparar mensaje de respuesta
+      let mensaje = 'Plan regenerado exitosamente';
+      if (adjusted) {
+        mensaje = `Plan regenerado con ajustes automáticos para garantizar realismo. ${adjustmentReason}`;
+      }
+
       return {
-        mensaje: adjustedPlan
-          ? `Plan regenerado y ajustado automáticamente (de ${daysAvailable} a ${finalDays} días)`
-          : 'Plan regenerado exitosamente',
+        mensaje,
         plan: updatedPlan,
         cambiosCriticos: true,
-        ajustado: adjustedPlan,
+        ajustado: adjusted,
         estadisticas: {
           totalPaginas: totalPages,
-          diasPlanificados: finalDays,
-          paginasPorDia: finalPagesPerDay,
+          diasPlanificados: daysNeeded,
+          paginasPorDia: pagesPerDay,
+          tiempoEstimadoDia: minutesPerDay,
           totalCapitulos: chapters.length,
+          fechaInicio: startDate.toISOString().split('T')[0],
+          fechaFin: finalEndDate.toISOString().split('T')[0],
+          razonAjuste: adjustmentReason,
         },
       };
 
@@ -831,20 +1038,55 @@ export class PlanService {
         }, 0);
 
       const fechaInicio = new Date(planDetails.fecha_inicio);
-      const fechaFin = new Date(planDetails.fecha_fin);
       const ahora = new Date();
 
-      const diasTotales = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 3600 * 24));
-      const diasTranscurridos = Math.ceil((ahora.getTime() - fechaInicio.getTime()) / (1000 * 3600 * 24));
-      const diasRestantes = Math.max(0, diasTotales - diasTranscurridos);
+      // ========== CORRECCIÓN: Calcular días basándose en detalles reales, no en fechas ==========
+
+      // Obtener fechas únicas de los detalles del plan (días reales de lectura planificados)
+      const fechasUnicas = new Set(
+        planDetails.detalleplanlectura.map(detail => {
+          const fecha = new Date(detail.fecha_asignada);
+          return fecha.toISOString().split('T')[0]; // Solo la fecha, sin hora
+        })
+      );
+
+      // Días totales = cantidad de días únicos en los detalles del plan
+      const diasTotales = fechasUnicas.size;
+
+      // Días completados = cantidad de días únicos donde todos los detalles están leídos
+      const diasCompletados = new Set(
+        planDetails.detalleplanlectura
+          .filter(d => d.leido)
+          .map(detail => {
+            const fecha = new Date(detail.fecha_asignada);
+            return fecha.toISOString().split('T')[0];
+          })
+      ).size;
+
+      // Calcular días transcurridos desde el inicio
+      const diasTranscurridos = Math.max(
+        0,
+        Math.ceil((ahora.getTime() - fechaInicio.getTime()) / (1000 * 3600 * 24))
+      );
+
+      // Días restantes = días totales - días completados
+      const diasRestantes = Math.max(0, diasTotales - diasCompletados);
+
+      this.logger.log(
+        `Estadísticas del plan ${planId}: ${diasTotales} días totales, ` +
+        `${diasCompletados} días completados, ${diasRestantes} días restantes`
+      );
 
       return {
         totalCapitulos,
         capitulosCompletados,
         totalPaginas,
         paginasLeidas,
+        diasTotales,
+        diasCompletados,
         diasTranscurridos: Math.max(0, diasTranscurridos),
         diasRestantes,
+        porcentajeCompletado: totalPaginas > 0 ? Math.round((paginasLeidas / totalPaginas) * 100) : 0,
       };
     } catch (error) {
       this.logger.error(`Error al calcular estadísticas: ${error.message}`, error.stack);
