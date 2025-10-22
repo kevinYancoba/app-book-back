@@ -430,6 +430,138 @@ export class PlanService {
     }
   }
 
+  // Generar detalles del plan preservando el progreso existente
+  private async generatePlanDetailsWithProgress(
+    planId: number,
+    chapters: any[],
+    startDate: Date,
+    finalDays: number,
+    pagesPerDay: number,
+    perfil: any,
+  ): Promise<void> {
+    this.logger.log(`Generando detalles del plan ${planId} preservando progreso existente`);
+
+    // Obtener detalles completados para saber desde dónde continuar
+    const completedDetails = await this.planRepository.getCompletedPlanDetails(planId);
+
+    // Calcular páginas ya leídas y desde dónde continuar
+    let pagesAlreadyRead = 0;
+    let lastCompletedPage = 0;
+    let lastCompletedChapterIndex = 0;
+
+    if (completedDetails && completedDetails.length > 0) {
+      // Encontrar la última página leída
+      const lastDetail = completedDetails[completedDetails.length - 1];
+      lastCompletedPage = lastDetail.pagina_fin || 0;
+      pagesAlreadyRead = completedDetails.reduce((sum: number, detail: any) =>
+        sum + ((detail.pagina_fin || 0) - (detail.pagina_inicio || 0) + 1), 0);
+
+      // Encontrar el índice del capítulo donde continuar
+      lastCompletedChapterIndex = chapters.findIndex(ch =>
+        ch.id_capitulo === lastDetail.id_capitulo);
+
+      this.logger.log(
+        `Progreso existente: ${pagesAlreadyRead} páginas leídas, ` +
+        `última página: ${lastCompletedPage}, ` +
+        `último capítulo: ${lastCompletedChapterIndex + 1}`
+      );
+    }
+
+    // Calcular páginas restantes
+    const totalPages = chapters.reduce((sum, chapter) =>
+      sum + (chapter.paginas_estimadas || 0), 0);
+    const remainingPages = totalPages - pagesAlreadyRead;
+
+    if (remainingPages <= 0) {
+      this.logger.log('No hay páginas restantes por planificar');
+      return;
+    }
+
+    // Calcular días necesarios para las páginas restantes
+    const remainingDays = Math.ceil(remainingPages / pagesPerDay);
+
+    this.logger.log(
+      `Páginas restantes: ${remainingPages}, ` +
+      `días necesarios: ${remainingDays}`
+    );
+
+    // Generar detalles para las páginas restantes
+    let currentPage = lastCompletedPage + 1;
+    let currentDate = new Date(startDate);
+    let currentChapterIndex = lastCompletedChapterIndex;
+
+    // Si terminamos el último capítulo completado, pasar al siguiente
+    if (lastCompletedPage > 0) {
+      const currentChapter = chapters[currentChapterIndex];
+      if (currentChapter && currentPage > currentChapter.paginas_estimadas) {
+        currentPage = 1;
+        currentChapterIndex++;
+      }
+    }
+
+    // Ajustar fecha de inicio si hay progreso existente
+    if (completedDetails && completedDetails.length > 0) {
+      const lastCompletedDate = new Date(completedDetails[completedDetails.length - 1].fecha_asignada);
+      lastCompletedDate.setDate(lastCompletedDate.getDate() + 1);
+      currentDate = lastCompletedDate;
+    }
+
+    for (let day = 0; day < remainingDays; day++) {
+      // Saltar fines de semana si está configurado
+      if (!perfil.finesSemana) {
+        while (currentDate.getDay() === 0 || currentDate.getDay() === 6) {
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      }
+
+      let remainingPagesForDay = pagesPerDay;
+
+      while (remainingPagesForDay > 0 && currentChapterIndex < chapters.length) {
+        const currentChapter = chapters[currentChapterIndex];
+        const chapterTotalPages = currentChapter.paginas_estimadas || 0;
+
+        const startPage = currentPage;
+        const maxEndPage = Math.min(
+          startPage + remainingPagesForDay - 1,
+          chapterTotalPages
+        );
+        const endPage = maxEndPage;
+
+        // Crear detalle del plan
+        await this.planRepository.createPlanDetail({
+          id_plan: planId,
+          id_capitulo: currentChapter.id_capitulo,
+          fecha_asignada: new Date(currentDate),
+          tiempo_estimado_minutos: perfil.tiempoLecturaDiario,
+          pagina_inicio: startPage,
+          pagina_fin: endPage,
+          day: day + 1 + (completedDetails?.length || 0), // Continuar numeración de días
+        });
+
+        // Actualizar contadores
+        const pagesRead = endPage - startPage + 1;
+        remainingPagesForDay -= pagesRead;
+        currentPage = endPage + 1;
+
+        // Si terminamos el capítulo, pasar al siguiente
+        if (currentPage > chapterTotalPages) {
+          currentPage = 1;
+          currentChapterIndex++;
+        }
+      }
+
+      // Avanzar al siguiente día
+      currentDate.setDate(currentDate.getDate() + 1);
+
+      // Si ya no hay más capítulos, terminar
+      if (currentChapterIndex >= chapters.length) {
+        break;
+      }
+    }
+
+    this.logger.log(`Detalles generados para ${remainingDays} días restantes`);
+  }
+
   // Obtener planes de un usuario
   async getUserPlans(userId: number) {
     try {
@@ -773,34 +905,43 @@ export class PlanService {
   }
 
   // Detectar si hay cambios críticos que requieren regenerar detalles
+  // Solo los siguientes campos requieren replanteamiento:
+  // - nivelLectura: Cambia las páginas por día
+  // - tiempoEstimadoDia: Cambia la capacidad de lectura diaria
+  // - incluirFinesSemana: Cambia los días disponibles para leer
   private detectCriticalChanges(updateData: UpdatePlanDto, currentPlan: any): boolean {
     const criticalFields: string[] = [];
 
-    if (updateData.fechaFin &&
-        updateData.fechaFin.getTime() !== new Date(currentPlan.fecha_fin).getTime()) {
-      criticalFields.push('fechaFin');
-    }
-
+    // CRÍTICO: Cambio en nivel de lectura (páginas por día)
     if (updateData.nivelLectura &&
         updateData.nivelLectura !== currentPlan.paginas_por_dia) {
       criticalFields.push('nivelLectura');
     }
 
-    if (updateData.incluirFinesSemana !== undefined &&
-        updateData.incluirFinesSemana !== currentPlan.incluir_fines_semana) {
-      criticalFields.push('incluirFinesSemana');
-    }
-
+    // CRÍTICO: Cambio en tiempo estimado por día
     if (updateData.tiempoEstimadoDia &&
         updateData.tiempoEstimadoDia !== currentPlan.tiempo_estimado_dia) {
       criticalFields.push('tiempoEstimadoDia');
     }
 
+    // CRÍTICO: Cambio en inclusión de fines de semana
+    if (updateData.incluirFinesSemana !== undefined &&
+        updateData.incluirFinesSemana !== currentPlan.incluir_fines_semana) {
+      criticalFields.push('incluirFinesSemana');
+    }
+
+    // NOTA: Los siguientes campos NO son críticos y no requieren replanteamiento:
+    // - titulo: Solo cambia metadata del plan
+    // - descripcion: Solo cambia metadata del plan
+    // - horaPreferida: Solo cambia preferencia de horario
+    // - fechaFin: Se calcula automáticamente, no debe ser input del usuario
+
     if (criticalFields.length > 0) {
-      this.logger.log(`Campos críticos modificados: ${criticalFields.join(', ')}`);
+      this.logger.log(`Campos críticos modificados que requieren replanteamiento: ${criticalFields.join(', ')}`);
       return true;
     }
 
+    this.logger.log('Solo cambios de metadata detectados. No se requiere replanteamiento.');
     return false;
   }
 
@@ -884,11 +1025,15 @@ export class PlanService {
         `Fecha de fin calculada: ${finalEndDate.toISOString().split('T')[0]}`
       );
 
-      // Eliminar detalles existentes no completados
+      // PRESERVAR PROGRESO: Solo eliminar detalles no completados
       const uncompletedDetails = await this.planRepository.getUncompletedPlanDetails(planId);
       if (uncompletedDetails && uncompletedDetails.length > 0) {
-        await this.planRepository.deletePlanDetails(planId);
-        this.logger.log(`${uncompletedDetails.length} detalles no completados eliminados`);
+        // Eliminar solo los detalles no completados usando IDs específicos
+        const uncompletedIds = uncompletedDetails.map(detail => detail.id_detalle);
+        await this.planRepository.deletePlanDetailsByIds(uncompletedIds);
+        this.logger.log(`${uncompletedDetails.length} detalles no completados eliminados. Progreso existente preservado.`);
+      } else {
+        this.logger.log('No hay detalles no completados para eliminar. Todo el progreso se mantiene.');
       }
 
       // Actualizar el plan principal con fecha calculada automáticamente
@@ -909,8 +1054,8 @@ export class PlanService {
         );
       }
 
-      // Generar nuevos detalles
-      await this.generatePlanDetails(
+      // Generar nuevos detalles considerando el progreso existente
+      await this.generatePlanDetailsWithProgress(
         planId,
         chapters,
         startDate,

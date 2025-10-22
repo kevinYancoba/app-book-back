@@ -237,6 +237,27 @@ export class PlanRepository {
     }
   }
 
+  // Eliminar detalles específicos por IDs (para preservar progreso)
+  async deletePlanDetailsByIds(detailIds: number[]) {
+    try {
+      this.logger.log(`Eliminando ${detailIds.length} detalles específicos`);
+
+      const deletedDetails = await this.prisma.planDetail.deleteMany({
+        where: {
+          id_detalle: {
+            in: detailIds,
+          },
+        },
+      });
+
+      this.logger.log(`${deletedDetails.count} detalles específicos eliminados`);
+      return deletedDetails;
+    } catch (error) {
+      this.logger.error(`Error al eliminar detalles específicos: ${error.message}`, error.stack);
+      return undefined;
+    }
+  }
+
   // Obtener detalles no completados de un plan
   async getUncompletedPlanDetails(planId: number) {
     try {
@@ -253,6 +274,36 @@ export class PlanRepository {
       return details;
     } catch (error) {
       this.logger.error(`Error al obtener detalles no completados: ${error.message}`, error.stack);
+      return undefined;
+    }
+  }
+
+  // Obtener detalles completados de un plan (para preservar progreso)
+  async getCompletedPlanDetails(planId: number) {
+    try {
+      const details = await this.prisma.planDetail.findMany({
+        where: {
+          id_plan: planId,
+          leido: true,
+        },
+        include: {
+          capitulo: {
+            select: {
+              id_capitulo: true,
+              numero_capitulo: true,
+              titulo_capitulo: true,
+              paginas_estimadas: true,
+            },
+          },
+        },
+        orderBy: {
+          fecha_asignada: 'asc',
+        },
+      });
+
+      return details;
+    } catch (error) {
+      this.logger.error(`Error al obtener detalles completados: ${error.message}`, error.stack);
       return undefined;
     }
   }
