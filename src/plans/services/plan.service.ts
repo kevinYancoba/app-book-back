@@ -678,7 +678,6 @@ export class PlanService {
         );
       }
 
-      // Verificar propiedad si se proporciona userId
       if (userId) {
         const isOwner = await this.planRepository.verifyPlanOwnership(planId, userId);
         if (!isOwner) {
@@ -689,7 +688,6 @@ export class PlanService {
         }
       }
 
-      // Obtener plan actual con todos sus detalles
       const currentPlan = await this.planRepository.findPlanWithDetails(planId);
       if (!currentPlan) {
         throw new HttpException(
@@ -698,7 +696,6 @@ export class PlanService {
         );
       }
 
-      // Validar que el plan no esté completado
       if (currentPlan.estado === 'COMPLETADO') {
         throw new HttpException(
           'No se puede modificar un plan completado',
@@ -706,18 +703,14 @@ export class PlanService {
         );
       }
 
-      // Validar datos de actualización
       this.validateUpdateData(updateData, currentPlan);
 
-      // Detectar si hay cambios críticos que requieren regenerar detalles
       const criticalChanges = this.detectCriticalChanges(updateData, currentPlan);
 
-      // Log si se actualiza el nivel de lectura
       if (updateData.nivelLectura !== undefined) {
         this.logger.log(`Nivel de lectura actualizado a ${updateData.nivelLectura} páginas por día`);
       }
 
-      // Determinar si se debe regenerar (por defecto true si hay cambios críticos)
       const shouldRegenerate = updateData.regenerarDetalles !== false && criticalChanges;
 
       if (shouldRegenerate && criticalChanges) {
