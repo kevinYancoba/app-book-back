@@ -1,0 +1,104 @@
+### Pruebas para los endpoints del Dashboard de Progreso
+### Asegúrate de tener datos de progreso registrados para el usuario
+
+@baseUrl = http://localhost:3000
+@contentType = application/json
+@userId = 48
+
+### 1. Dashboard completo - Período mensual (por defecto)
+GET {{baseUrl}}/reports/dashboard/complete?userId={{userId}}
+Content-Type: {{contentType}}
+
+###
+
+### 2. Dashboard completo - Período semanal
+GET {{baseUrl}}/reports/dashboard/complete?userId={{userId}}&period=WEEK
+Content-Type: {{contentType}}
+
+###
+
+### 3. Dashboard completo - Período personalizado
+GET {{baseUrl}}/reports/dashboard/complete?userId={{userId}}&period=CUSTOM&startDate=2025-01-01&endDate=2025-01-31
+Content-Type: {{contentType}}
+
+###
+
+### 4. Dashboard completo - Período trimestral
+GET {{baseUrl}}/reports/dashboard/complete?userId={{userId}}&period=QUARTER
+Content-Type: {{contentType}}
+
+###
+
+### 5. Dashboard rápido diario
+GET {{baseUrl}}/reports/dashboard/quick/{{userId}}
+Content-Type: {{contentType}}
+
+###
+
+### 6. Análisis de tendencias - Semanal
+GET {{baseUrl}}/reports/analytics/trends/{{userId}}?period=WEEK
+Content-Type: {{contentType}}
+
+###
+
+### 7. Análisis de tendencias - Mensual
+GET {{baseUrl}}/reports/analytics/trends/{{userId}}?period=MONTH
+Content-Type: {{contentType}}
+
+###
+
+### 8. Análisis de rendimiento - Semanal
+GET {{baseUrl}}/reports/analytics/performance/{{userId}}?period=WEEK
+Content-Type: {{contentType}}
+
+###
+
+### 9. Análisis de rendimiento - Mensual
+GET {{baseUrl}}/reports/analytics/performance/{{userId}}?period=MONTH
+Content-Type: {{contentType}}
+
+###
+
+### 10. Alertas y recomendaciones
+GET {{baseUrl}}/reports/alerts/{{userId}}
+Content-Type: {{contentType}}
+
+###
+
+### 11. Resumen ejecutivo
+GET {{baseUrl}}/reports/summary/{{userId}}
+Content-Type: {{contentType}}
+
+###
+
+### Casos de error para probar validaciones
+
+### 12. Dashboard sin userId (debe fallar)
+GET {{baseUrl}}/reports/dashboard/complete
+Content-Type: {{contentType}}
+
+###
+
+### 13. Dashboard con userId inválido (debe fallar)
+GET {{baseUrl}}/reports/dashboard/quick/0
+Content-Type: {{contentType}}
+
+###
+
+### 14. Usuario inexistente (debe manejar graciosamente)
+GET {{baseUrl}}/reports/dashboard/quick/999999
+Content-Type: {{contentType}}
+
+###
+
+### 15. Período inválido (debe usar por defecto)
+GET {{baseUrl}}/reports/dashboard/complete?userId={{userId}}&period=INVALID_PERIOD
+Content-Type: {{contentType}}
+
+###
+
+### 16. Fechas personalizadas inválidas
+GET {{baseUrl}}/reports/dashboard/complete?userId={{userId}}&period=CUSTOM&startDate=invalid-date&endDate=2025-01-31
+Content-Type: {{contentType}}
+
+###

@@ -6,7 +6,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["auth"]
+  schemas  = ["auth", "books"]
 }
 
 model JwtToken {
@@ -22,28 +22,203 @@ model JwtToken {
 }
 
 model PasswordReset {
-  id          Int       @id(map: "password_resets_pkey") @default(autoincrement())
-  user_id     Int?
-  reset_token String    @unique(map: "password_resets_reset_token_key")
-  expires_at  DateTime  @db.Timestamp(6)
-  created_at  DateTime? @db.Timestamp(6)
-  user        User?     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "password_resets_user_id_fkey")
+  id         Int       @id(map: "password_resets_pkey") @default(autoincrement())
+  user_id    Int?
+  reset_code String    @unique(map: "password_resets_reset_token_key")
+  expires_at DateTime  @db.Timestamp(6)
+  created_at DateTime? @db.Timestamp(6)
+  user       User?     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "password_resets_user_id_fkey")
 
   @@map("password_reset")
   @@schema("auth")
 }
 
 model User {
-  id             Int             @id(map: "users_pkey") @default(autoincrement())
-  name           String          @db.VarChar
-  last_name      String          @db.VarChar
-  email          String          @unique(map: "users_email_key")
-  password_hash  String
-  created_at     DateTime?       @db.Timestamp(6)
-  updated_at     DateTime?       @db.Timestamp(6)
-  jwt_token      JwtToken[]
-  password_reset PasswordReset[]
+  id                   Int                   @id(map: "users_pkey") @default(autoincrement())
+  name                 String                @db.VarChar
+  last_name            String                @db.VarChar
+  email                String                @unique(map: "users_email_key")
+  password_hash        String
+  created_at           DateTime?             @db.Timestamp(6)
+  updated_at           DateTime?             @db.Timestamp(6)
+  jwt_token            JwtToken[]
+  password_reset       PasswordReset[]
+  libro                Book[]
+  notificacion         Notification[]
+  perfillectura        ReadinProfile[]
+  planlectura          ReadingPlan[]
+  preferencias_usuario preferencias_usuario?
 
   @@map("user")
   @@schema("auth")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model Chapter {
+  id_capitulo        Int          @id @default(autoincrement())
+  id_libro           Int?
+  numero_capitulo    Int
+  titulo_capitulo    String?      @db.VarChar(200)
+  paginas_estimadas  Int?
+  libro              Book?        @relation(fields: [id_libro], references: [id_libro], onDelete: Cascade, onUpdate: NoAction)
+  detalleplanlectura PlanDetail[]
+
+  @@map("capitulo")
+  @@schema("books")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model PlanDetail {
+  id_detalle              Int          @id @default(autoincrement())
+  id_plan                 Int?
+  id_capitulo             Int?
+  fecha_asignada          DateTime     @db.Date
+  leido                   Boolean?     @default(false)
+  tiempo_estimado_minutos Int?
+  pagina_inicio           Int?
+  pagina_fin              Int?
+  dia                     Int?
+  created_at              DateTime?    @default(now()) @db.Timestamp(6)
+  dificultad_percibida    Int?
+  es_atrasado             Boolean?     @default(false)
+  fecha_completado        DateTime?    @db.Date
+  notas                   String?
+  tiempo_real_minutos     Int?
+  updated_at              DateTime?    @db.Timestamp(6)
+  capitulo                Chapter?     @relation(fields: [id_capitulo], references: [id_capitulo], onDelete: Cascade, onUpdate: NoAction)
+  planlectura             ReadingPlan? @relation(fields: [id_plan], references: [id_plan], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("detalleplanlectura")
+  @@schema("books")
+}
+
+model Book {
+  id_libro       Int           @id @default(autoincrement())
+  titulo         String        @db.VarChar(200)
+  autor          String?       @db.VarChar(150)
+  imagen_indice  String?
+  id             Int?
+  creado_por_ocr Boolean?      @default(false)
+  fecha_subida   DateTime?     @default(now()) @db.Timestamp(6)
+  capitulo       Chapter[]
+  user           User?         @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  planlectura    ReadingPlan[]
+
+  @@map("libro")
+  @@schema("books")
+}
+
+model Notification {
+  id_notificacion Int       @id @default(autoincrement())
+  id              Int?
+  mensaje         String
+  fecha_envio     DateTime? @default(now()) @db.Timestamp(6)
+  leida           Boolean?  @default(false)
+  user            User?     @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("notificacion")
+  @@schema("books")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ReadinProfile {
+  id_perfil               Int       @id @default(autoincrement())
+  user_id                 Int
+  nivel_lectura           Int?
+  tiempo_lectura_diario   Int?
+  hora_preferida          DateTime  @db.Time(6)
+  incluir_fines_de_semana Boolean?  @default(true)
+  fecha_registro          DateTime? @default(now()) @db.Timestamp(6)
+  auto_ajuste_plan        Boolean?  @default(true)
+  recordatorios_activos   Boolean?  @default(true)
+  updated_at              DateTime? @db.Timestamp(6)
+  user                    User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  planlectura             ReadingPlan[]
+
+  @@map("perfillectura")
+  @@schema("books")
+}
+
+model ReadingPlan {
+  id_plan              Int               @id @default(autoincrement())
+  id                   Int?
+  id_libro             Int?
+  id_perfil            Int?
+  fecha_inicio         DateTime          @db.Date
+  fecha_fin            DateTime          @db.Date
+  generado_por_ia      Boolean?          @default(true)
+  descripcion          String?
+  created_at           DateTime?         @default(now()) @db.Timestamp(6)
+  dias_atrasado        Int?              @default(0)
+  es_personalizado     Boolean?          @default(false)
+  estado               PlanStatus        @default(ACTIVO)
+  fecha_fin_original   DateTime          @db.Date
+  incluir_fines_semana Boolean?          @default(true)
+  paginas_por_dia      Int?
+  progreso_porcentaje  Float?            @default(0.0)
+  tiempo_estimado_dia  Int?
+  titulo               String            @db.VarChar(200)
+  updated_at           DateTime?         @db.Timestamp(6)
+  detalleplanlectura   PlanDetail[]
+  user                 User?             @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  libro                Book?             @relation(fields: [id_libro], references: [id_libro], onDelete: Cascade, onUpdate: NoAction)
+  perfillectura        ReadinProfile?    @relation(fields: [id_perfil], references: [id_perfil], onDelete: SetNull, onUpdate: NoAction)
+  progresolectura      ReadingProgress[]
+
+  @@map("planlectura")
+  @@schema("books")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ReadingProgress {
+  id_progreso          Int          @id @default(autoincrement())
+  id_plan              Int?
+  fecha                DateTime     @db.Date
+  capitulos_leidos     Int?
+  tiempo_invertido_min Int?
+  completado           Boolean?     @default(false)
+  created_at           DateTime?    @default(now()) @db.Timestamp(6)
+  estado_dia           DayStatus    @default(PENDIENTE)
+  notas_dia            String?
+  paginas_leidas       Int?
+  porcentaje_dia       Float?       @default(0.0)
+  planlectura          ReadingPlan? @relation(fields: [id_plan], references: [id_plan], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("progresolectura")
+  @@schema("books")
+}
+
+model preferencias_usuario {
+  id                   Int       @id @default(autoincrement())
+  user_id              Int       @unique
+  tema_preferido       String?   @default("light")
+  idioma               String?   @default("es")
+  notificaciones_email Boolean?  @default(true)
+  notificaciones_push  Boolean?  @default(true)
+  zona_horaria         String?   @default("America/Mexico_City")
+  formato_fecha        String?   @default("DD/MM/YYYY")
+  created_at           DateTime? @default(now()) @db.Timestamp(6)
+  updated_at           DateTime? @db.Timestamp(6)
+  user                 User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("books")
+}
+
+enum DayStatus {
+  PENDIENTE
+  COMPLETADO
+  PARCIAL
+  ATRASADO
+  SALTADO
+
+  @@schema("books")
+}
+
+enum PlanStatus {
+  ACTIVO
+  COMPLETADO
+  PAUSADO
+  CANCELADO
+
+  @@schema("books")
 }

@@ -12,6 +12,11 @@ async function bootstrap() {
   app.enableCors(CORS);
 
   const config = new DocumentBuilder()
+    .addBearerAuth({
+      type: 'http',
+      scheme: 'bearer',
+      in: 'header',
+    })
     .setTitle('TrackBook')
     .setDescription('Api, tracking de libros ')
     .setVersion('1.0')

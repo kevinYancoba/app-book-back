@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DatabaseService } from './../database/database.service';
 import { UserDto } from './dto/user.dto';
 import { User } from '@prisma/client';
+import { addMinutes } from 'date-fns';
 
 @Injectable()
 export class AuthRepository {
@@ -10,7 +11,6 @@ export class AuthRepository {
   async createUser(user: UserDto): Promise<User | undefined> {
     try {
       const createdUser = await this.prisma.user.create({
-
         data: {
           name: user.name,
           last_name: user.lastName,
@@ -21,22 +21,126 @@ export class AuthRepository {
       });
 
       return createdUser;
+    } catch (error) {
+      return undefined;
+    }
+  }
+
+  async UpdatePassword(
+    email: string,
+    password: string,
+  ): Promise<User | undefined> {
+    try {
+      const userUpdate = await this.prisma.user.update({
+        where: {
+          email: email,
+        },
+        data: {
+          password_hash: password,
+        },
+      });
+
+      return userUpdate;
 
     } catch (error) {
       return undefined;
     }
   }
 
-  async getUserByEmail(email: string) : Promise<User | undefined>{
+  async getUserByEmail(email: string): Promise<User | undefined> {
     try {
       const user = await this.prisma.user.findUnique({
         where: {
           email: email,
-        }
+        },
       });
 
-      return user || undefined
-     
-    } catch (error) { return undefined}
+      return user || undefined;
+    } catch (error) {
+      return undefined;
+    }
+  }
+
+  async createCodeReset(code: string, user: User) {
+    const expiresAt = addMinutes(new Date(), 15);
+
+    try {
+      // Eliminar códigos anteriores del usuario
+      await this.prisma.passwordReset.deleteMany({
+        where: {
+          user_id: user.id,
+        },
+      });
+
+      const resetPassworDetail = await this.prisma.passwordReset.create({
+        data: {
+          user_id: user.id,
+          reset_code: code,
+          expires_at: expiresAt,
+          created_at: new Date(),
+        },
+      });
+
+      return resetPassworDetail;
+    } catch (error) {
+      return undefined;
+    }
+  }
+
+  async validateResetCode(email: string, code: string): Promise<boolean> {
+    try {
+      const user = await this.getUserByEmail(email);
+      if (!user) {
+        return false;
+      }
+
+      const resetRecord = await this.prisma.passwordReset.findFirst({
+        where: {
+          user_id: user.id,
+          reset_code: code,
+          expires_at: {
+            gt: new Date(), // Código no expirado
+          },
+        },
+      });
+
+      return !!resetRecord;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async deleteResetCode(email: string, code: string): Promise<boolean> {
+    try {
+      const user = await this.getUserByEmail(email);
+      if (!user) {
+        return false;
+      }
+
+      const deleteResult = await this.prisma.passwordReset.deleteMany({
+        where: {
+          user_id: user.id,
+          reset_code: code,
+        },
+      });
+
+      return deleteResult.count > 0;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async cleanExpiredResetCodes(): Promise<void> {
+    try {
+      await this.prisma.passwordReset.deleteMany({
+        where: {
+          expires_at: {
+            lt: new Date(), // Códigos expirados
+          },
+        },
+      });
+    } catch (error) {
+      console.error('Error cleaning expired reset codes:', error);
+    }
   }
 }

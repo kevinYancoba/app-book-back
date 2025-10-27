@@ -1,0 +1,75 @@
+### Prueba específica para verificar la corrección del mapeo de campos
+### Asegúrate de tener un plan creado con ID 1
+
+@baseUrl = http://localhost:3000
+@planId = 1
+
+### 1. Obtener el plan antes de actualizar
+GET {{baseUrl}}/plan/{{planId}}
+Content-Type: application/json
+
+###
+
+### 2. Actualizar plan con todos los campos (prueba completa)
+PUT {{baseUrl}}/plan/{{planId}}
+Content-Type: application/json
+
+{
+  "titulo": "Mi Plan de Lectura Personalizado",
+  "descripcion": "Plan personalizado para leer durante las vacaciones de verano",
+  "fechaFin": "2025-05-15T23:59:59Z",
+  "incluirFinesSemana": false,
+  "paginasPorDia": 8,
+  "tiempoEstimadoDia": 45
+}
+
+###
+
+### 3. Actualizar solo algunos campos (prueba parcial)
+PUT {{baseUrl}}/plan/{{planId}}
+Content-Type: application/json
+
+{
+  "titulo": "Título Actualizado Parcialmente",
+  "paginasPorDia": 12
+}
+
+###
+
+### 4. Verificar que los cambios se aplicaron
+GET {{baseUrl}}/plan/{{planId}}
+Content-Type: application/json
+
+###
+
+### 5. Prueba con fecha en el futuro
+PUT {{baseUrl}}/plan/{{planId}}
+Content-Type: application/json
+
+{
+  "fechaFin": "2025-12-31T23:59:59Z",
+  "descripcion": "Plan extendido hasta fin de año"
+}
+
+###
+
+### 6. Prueba de validación - fecha en el pasado (debe fallar)
+PUT {{baseUrl}}/plan/{{planId}}
+Content-Type: application/json
+
+{
+  "fechaFin": "2020-01-01T00:00:00Z"
+}
+
+###
+
+### 7. Prueba de validación - valores negativos (debe fallar)
+PUT {{baseUrl}}/plan/{{planId}}
+Content-Type: application/json
+
+{
+  "paginasPorDia": -5,
+  "tiempoEstimadoDia": 0
+}
+
+###
